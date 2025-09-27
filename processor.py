@@ -67,7 +67,8 @@ class IconProcessor:
             pixel_clusters = self._apply_distance_threshold(
                 pixel_clusters,
                 params['distance_threshold'],
-                params['n_layers']
+                params['n_layers'],
+                params.get('max_regions_per_color', 3)
             )
 
         # Step 6: Generate layer masks
@@ -143,7 +144,7 @@ class IconProcessor:
 
         return cluster_labels
 
-    def _apply_distance_threshold(self, pixel_clusters, threshold, n_layers):
+    def _apply_distance_threshold(self, pixel_clusters, threshold, n_layers, max_regions_per_color):
         """Apply distance threshold to separate disconnected regions of same color"""
         result = np.copy(pixel_clusters)
         next_label = n_layers
@@ -164,26 +165,36 @@ class IconProcessor:
                 # Sort by size (largest first)
                 component_sizes.sort(key=lambda x: x[1], reverse=True)
 
-                # Determine threshold based on mode
-                if threshold == 'auto':
-                    # Auto mode: keep largest 2-3 components together
-                    # Split if we have more than 3 significant components
+                # Limit the number of regions per color
+                regions_to_create = min(num_features, max_regions_per_color)
+
+                # Only split if we have more components than max_regions_per_color
+                if num_features > max_regions_per_color:
+                    # Keep the largest N-1 components separate
+                    for idx in range(1, regions_to_create):
+                        comp_id, size = component_sizes[idx]
+                        result[labeled == comp_id] = next_label
+                        next_label += 1
+
+                    # Merge all remaining smaller components with the last allowed region
+                    if regions_to_create < num_features:
+                        # The last region gets all the remaining small components
+                        last_label = next_label - 1
+                        for idx in range(regions_to_create, num_features):
+                            comp_id, size = component_sizes[idx]
+                            result[labeled == comp_id] = last_label
+
+                elif num_features > 1 and threshold == 'auto':
+                    # If within limit but auto mode, only split if significant
                     significant_components = [
                         c for c in component_sizes
-                        if c[1] > (mask.sum() * 0.01)  # At least 1% of total cluster size
+                        if c[1] > (mask.sum() * 0.05)  # At least 5% of total cluster size
                     ]
 
-                    if len(significant_components) > 3:
-                        # Keep the largest component with original label
-                        # Assign new labels to others
-                        for idx, (comp_id, size) in enumerate(component_sizes[1:]):
-                            result[labeled == comp_id] = next_label
-                            next_label += 1
-                else:
-                    # Manual threshold mode (future implementation)
-                    # For now, same as auto
-                    if len(component_sizes) > 3:
-                        for idx, (comp_id, size) in enumerate(component_sizes[1:]):
+                    if len(significant_components) > 1:
+                        # Split significant components (up to max_regions_per_color)
+                        for idx in range(1, min(len(significant_components), max_regions_per_color)):
+                            comp_id = significant_components[idx][0]
                             result[labeled == comp_id] = next_label
                             next_label += 1
 
@@ -198,22 +209,32 @@ class IconProcessor:
             # Create mask for this cluster
             mask = (pixel_clusters == cluster_id).astype(np.float32)
 
-            # Handle edge mode
-            if edge_mode == 'hard':
-                # Hard edges: threshold at 50% opacity
-                mask = (mask > 0.5).astype(np.float32)
-            else:
-                # Soft edges: apply slight blur for anti-aliasing
-                mask = cv2.GaussianBlur(mask, (3, 3), 0.5)
-
             # Create RGBA layer
             layer = np.zeros((image.shape[0], image.shape[1], 4), dtype=np.float32)
-            layer[:, :, :3] = image / 255.0  # Normalize to 0-1
-            layer[:, :, 3] = mask
 
-            # Apply mask to RGB channels
-            for c in range(3):
-                layer[:, :, c] *= mask
+            # Handle edge mode
+            if edge_mode == 'hard':
+                # Hard edges: binary mask
+                alpha_mask = mask
+                # Apply mask to extract only this cluster's pixels
+                for c in range(3):
+                    layer[:, :, c] = (image[:, :, c] / 255.0) * mask
+                layer[:, :, 3] = alpha_mask
+            else:
+                # Soft edges: blur the mask for anti-aliasing
+                # Create a slightly dilated mask for color extraction
+                kernel = np.ones((3, 3), np.uint8)
+                dilated_mask = cv2.dilate(mask, kernel, iterations=1)
+
+                # Extract colors from dilated region (to ensure edge colors are captured)
+                for c in range(3):
+                    layer[:, :, c] = (image[:, :, c] / 255.0) * dilated_mask
+
+                # Apply Gaussian blur to alpha channel for soft edges
+                alpha_mask = cv2.GaussianBlur(mask, (3, 3), 0.8)
+                layer[:, :, 3] = alpha_mask
+
+                # DON'T multiply RGB by alpha - keep full color values at edges
 
             layers.append(layer)
 

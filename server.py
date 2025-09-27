@@ -63,6 +63,7 @@ def process_image():
             'compactness': float(request.form.get('compactness', 25)),
             'n_segments': int(request.form.get('n_segments', 800)),
             'distance_threshold': request.form.get('distance_threshold', 'auto'),
+            'max_regions_per_color': int(request.form.get('max_regions_per_color', 3)),
             'edge_mode': request.form.get('edge_mode', 'soft'),
             'visualize_steps': request.form.get('visualize_steps', 'true') == 'true'
         }

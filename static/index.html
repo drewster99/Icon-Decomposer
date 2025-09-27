@@ -63,6 +63,15 @@
                 </select>
             </div>
 
+            <div class="control-group" id="max-regions-group">
+                <label for="max-regions">Max Regions per Color</label>
+                <div class="slider-container">
+                    <input type="range" id="max-regions" min="1" max="5" value="3" class="slider">
+                    <span class="slider-value" id="max-regions-value">3</span>
+                </div>
+                <p class="control-help">Limits how many separate regions a single color can create</p>
+            </div>
+
             <div class="control-group">
                 <label for="edge-mode">Edge Handling</label>
                 <select id="edge-mode">

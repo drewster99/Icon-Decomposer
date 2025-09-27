@@ -20,6 +20,9 @@ class IconDecomposer {
         this.nSegmentsSlider = document.getElementById('n-segments');
         this.nSegmentsValue = document.getElementById('n-segments-value');
         this.distanceThreshold = document.getElementById('distance-threshold');
+        this.maxRegionsSlider = document.getElementById('max-regions');
+        this.maxRegionsValue = document.getElementById('max-regions-value');
+        this.maxRegionsGroup = document.getElementById('max-regions-group');
         this.edgeMode = document.getElementById('edge-mode');
         this.processBtn = document.getElementById('process-btn');
 
@@ -76,8 +79,18 @@ class IconDecomposer {
             this.scheduleReprocess();
         });
 
+        this.maxRegionsSlider.addEventListener('input', (e) => {
+            this.maxRegionsValue.textContent = e.target.value;
+            this.scheduleReprocess();
+        });
+
         // Select changes
-        this.distanceThreshold.addEventListener('change', () => this.scheduleReprocess());
+        this.distanceThreshold.addEventListener('change', () => {
+            // Show/hide max regions slider based on selection
+            this.maxRegionsGroup.style.display =
+                this.distanceThreshold.value === 'off' ? 'none' : 'block';
+            this.scheduleReprocess();
+        });
         this.edgeMode.addEventListener('change', () => this.scheduleReprocess());
 
         // Process button
@@ -137,6 +150,7 @@ class IconDecomposer {
         formData.append('compactness', this.compactnessSlider.value);
         formData.append('n_segments', this.nSegmentsSlider.value);
         formData.append('distance_threshold', this.distanceThreshold.value);
+        formData.append('max_regions_per_color', this.maxRegionsSlider.value);
         formData.append('edge_mode', this.edgeMode.value);
         formData.append('visualize_steps', 'true');
 

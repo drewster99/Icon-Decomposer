@@ -101,15 +101,18 @@
             <div class="export-section">
                 <h3>Export Options</h3>
                 <div class="export-controls">
-                    <input type="text" id="base-name" placeholder="Enter base name" value="icon" class="text-input">
+                    <div class="input-group">
+                        <label for="base-name">Export filename:</label>
+                        <input type="text" id="base-name" placeholder="Enter base name" value="icon" class="text-input">
+                    </div>
                     <div class="radio-group">
                         <label>
                             <input type="radio" name="export-mode" value="folder" checked>
-                            <span>Folder mode (basename/layer_0.png)</span>
+                            <span>Folder mode: <span class="export-example" id="folder-example">icon/layer_0.png</span></span>
                         </label>
                         <label>
                             <input type="radio" name="export-mode" value="suffix">
-                            <span>Suffix mode (basename_0.png)</span>
+                            <span>Suffix mode: <span class="export-example" id="suffix-example">icon_0.png</span></span>
                         </label>
                     </div>
                     <button id="export-btn" class="btn btn-success">Export All Layers</button>

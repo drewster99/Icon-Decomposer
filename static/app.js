@@ -33,6 +33,8 @@ class IconDecomposer {
         this.layersGrid = document.getElementById('layers-grid');
         this.statistics = document.getElementById('statistics');
         this.baseName = document.getElementById('base-name');
+        this.folderExample = document.getElementById('folder-example');
+        this.suffixExample = document.getElementById('suffix-example');
         this.exportBtn = document.getElementById('export-btn');
         this.previewBtn = document.getElementById('preview-btn');
 
@@ -99,6 +101,9 @@ class IconDecomposer {
         // Export buttons
         this.exportBtn.addEventListener('click', () => this.exportLayers());
         this.previewBtn.addEventListener('click', () => this.generatePreview());
+
+        // Update export examples when base name changes
+        this.baseName.addEventListener('input', () => this.updateExportExamples());
     }
 
     handleFileSelect(file) {
@@ -109,6 +114,12 @@ class IconDecomposer {
             alert('Please upload a PNG or JPG image');
             return;
         }
+
+        // Extract filename without extension for base name
+        const fileName = file.name;
+        const baseName = fileName.substring(0, fileName.lastIndexOf('.')) || fileName;
+        this.baseName.value = baseName;
+        this.updateExportExamples();
 
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -177,14 +188,17 @@ class IconDecomposer {
     }
 
     displayResults(data) {
+        // Store visualizations for use in layers section
+        this.currentVisualizations = data.visualizations;
+
         // Display visualizations
         if (data.visualizations) {
             this.displayVisualizations(data.visualizations);
         }
 
         // Display layers
-        if (data.layers) {
-            this.displayLayers(data.layers, data.statistics);
+        if (data.layers && data.visualizations) {
+            this.displayLayers(data.layers, data.statistics, data.visualizations);
         }
 
         // Display statistics
@@ -199,6 +213,14 @@ class IconDecomposer {
     displayVisualizations(visualizations) {
         this.vizGrid.innerHTML = '';
 
+        const vizOrder = [
+            'original',
+            'superpixels',
+            'superpixel_colors',
+            'clustered',
+            'reconstruction'
+        ];
+
         const vizLabels = {
             'original': 'Original Image',
             'superpixels': 'Superpixel Boundaries',
@@ -207,20 +229,46 @@ class IconDecomposer {
             'reconstruction': 'Reconstruction Preview'
         };
 
-        for (const [key, imageData] of Object.entries(visualizations)) {
-            const vizItem = document.createElement('div');
-            vizItem.className = 'viz-item';
-            vizItem.innerHTML = `
-                <img src="data:image/png;base64,${imageData}" alt="${key}">
-                <p>${vizLabels[key] || key}</p>
-            `;
-            this.vizGrid.appendChild(vizItem);
+        // Display in specified order
+        for (const key of vizOrder) {
+            if (visualizations[key]) {
+                const vizItem = document.createElement('div');
+                vizItem.className = 'viz-item';
+                vizItem.innerHTML = `
+                    <img src="data:image/png;base64,${visualizations[key]}" alt="${key}">
+                    <p>${vizLabels[key]}</p>
+                `;
+                this.vizGrid.appendChild(vizItem);
+            }
         }
     }
 
-    displayLayers(layers, statistics) {
+    displayLayers(layers, statistics, visualizations) {
         this.layersGrid.innerHTML = '';
 
+        // Add original image first
+        if (visualizations.original) {
+            const originalItem = document.createElement('div');
+            originalItem.className = 'layer-item special-item';
+            originalItem.innerHTML = `
+                <div class="layer-preview">
+                    <img src="data:image/png;base64,${visualizations.original}" alt="Original">
+                </div>
+                <div class="layer-info">
+                    <span class="layer-name">Original</span>
+                    <span class="layer-stats">Source Image</span>
+                </div>
+            `;
+            this.layersGrid.appendChild(originalItem);
+        }
+
+        // Add arrow indicator
+        const arrow = document.createElement('div');
+        arrow.className = 'arrow-indicator';
+        arrow.innerHTML = '→';
+        this.layersGrid.appendChild(arrow);
+
+        // Add each layer
         layers.forEach((layerData, index) => {
             const layerItem = document.createElement('div');
             layerItem.className = 'layer-item';
@@ -241,6 +289,28 @@ class IconDecomposer {
 
             this.layersGrid.appendChild(layerItem);
         });
+
+        // Add equals indicator
+        const equals = document.createElement('div');
+        equals.className = 'arrow-indicator';
+        equals.innerHTML = '=';
+        this.layersGrid.appendChild(equals);
+
+        // Add reconstruction preview last
+        if (visualizations.reconstruction) {
+            const reconstructionItem = document.createElement('div');
+            reconstructionItem.className = 'layer-item special-item';
+            reconstructionItem.innerHTML = `
+                <div class="layer-preview">
+                    <img src="data:image/png;base64,${visualizations.reconstruction}" alt="Reconstruction">
+                </div>
+                <div class="layer-info">
+                    <span class="layer-name">Reconstruction</span>
+                    <span class="layer-stats">Stacked Result</span>
+                </div>
+            `;
+            this.layersGrid.appendChild(reconstructionItem);
+        }
     }
 
     displayStatistics(statistics) {
@@ -355,6 +425,12 @@ class IconDecomposer {
 
     formatNumber(num) {
         return num.toLocaleString();
+    }
+
+    updateExportExamples() {
+        const baseName = this.baseName.value || 'icon';
+        this.folderExample.textContent = `${baseName}/layer_0.png`;
+        this.suffixExample.textContent = `${baseName}_0.png`;
     }
 }
 

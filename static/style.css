@@ -9,13 +9,15 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     color: #333;
+    margin: 0;
+    padding: 2rem;
     overflow-x: hidden;
 }
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
-    padding: 2rem;
+    padding: 0;
 }
 
 header {
@@ -445,10 +447,18 @@ select {
 .preview-item img {
     width: 150px;
     height: 150px;
+    aspect-ratio: 1;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     margin-bottom: 0.5rem;
     object-fit: contain;
+    background: repeating-linear-gradient(
+        45deg,
+        #f0f0f0,
+        #f0f0f0 10px,
+        #fafafa 10px,
+        #fafafa 20px
+    );
 }
 
 .preview-item p {

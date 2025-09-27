@@ -60,7 +60,7 @@ def process_image():
         # Get parameters from request
         params = {
             'n_layers': int(request.form.get('n_layers', 6)),
-            'compactness': float(request.form.get('compactness', 20)),
+            'compactness': float(request.form.get('compactness', 25)),
             'n_segments': int(request.form.get('n_segments', 800)),
             'distance_threshold': request.form.get('distance_threshold', 'auto'),
             'edge_mode': request.form.get('edge_mode', 'soft'),

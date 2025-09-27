@@ -233,7 +233,7 @@ class IconDecomposer {
             'original': 'Original Image',
             'superpixels': 'Superpixel Boundaries',
             'superpixel_colors': 'Superpixel Average Colors',
-            'clustered': 'Clustered Colors',
+            'clustered': 'K-means Color Clusters',
             'reconstruction': 'Reconstruction Preview'
         };
 

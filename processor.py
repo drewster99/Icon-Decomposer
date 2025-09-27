@@ -17,8 +17,15 @@ class IconProcessor:
 
     def process_image(self, image_path, params):
         """Main processing pipeline"""
+        import time
+        import os
+
         # Load image
+        load_start = time.time()
         img = Image.open(image_path)
+        file_size = os.path.getsize(image_path)
+        original_size = img.size
+
         if img.mode == 'RGBA':
             # Convert RGBA to RGB by compositing on white background
             background = Image.new('RGB', img.size, (255, 255, 255))
@@ -32,6 +39,9 @@ class IconProcessor:
             img = img.resize((1024, 1024), Image.Resampling.LANCZOS)
 
         self.original_image = np.array(img)
+        print(f"Image loading: {(time.time() - load_start):.3f}s")
+        print(f"  Original size: {original_size}")
+        print(f"  File size: {file_size:,} bytes")
 
         result = {
             'status': 'success',
@@ -41,47 +51,60 @@ class IconProcessor:
         }
 
         # Step 1: SLIC Superpixel Segmentation
+        slic_start = time.time()
         self.superpixels = self._perform_slic(
             self.original_image,
             n_segments=params['n_segments'],
             compactness=params['compactness']
         )
+        print(f"SLIC segmentation: {(time.time() - slic_start):.3f}s")
+        print(f"  Unique superpixels: {self.superpixels.max() + 1}")
 
         # Step 2: Extract superpixel features
+        extract_start = time.time()
         superpixel_colors = self._extract_superpixel_colors(
             self.original_image,
             self.superpixels
         )
+        print(f"Feature extraction: {(time.time() - extract_start):.3f}s")
 
         # Step 3: K-means clustering in LAB space
+        kmeans_start = time.time()
         cluster_labels = self._perform_kmeans(
             superpixel_colors,
             n_clusters=params['n_layers']
         )
+        print(f"K-means clustering: {(time.time() - kmeans_start):.3f}s")
 
         # Step 4: Map clusters back to pixels
         pixel_clusters = cluster_labels[self.superpixels]
 
         # Step 5: Connected component analysis with distance threshold
         if params['distance_threshold'] != 'off':
+            threshold_start = time.time()
             pixel_clusters = self._apply_distance_threshold(
                 pixel_clusters,
                 params['distance_threshold'],
                 params['n_layers'],
                 params.get('max_regions_per_color', 3)
             )
+            print(f"Distance threshold: {(time.time() - threshold_start):.3f}s")
 
         # Step 6: Generate layer masks
+        layer_start = time.time()
         self.layers = self._generate_layers(
             self.original_image,
             pixel_clusters,
             params['edge_mode']
         )
+        print(f"Layer generation: {(time.time() - layer_start):.3f}s")
+        print(f"  Number of layers: {len(self.layers)}")
 
         result['layers'] = self.layers
 
         # Generate visualizations if requested
         if params['visualize_steps']:
+            viz_start = time.time()
             result['visualizations'] = self._generate_visualizations(
                 self.original_image,
                 self.superpixels,
@@ -89,12 +112,16 @@ class IconProcessor:
                 cluster_labels,
                 pixel_clusters
             )
+            print(f"Visualization generation: {(time.time() - viz_start):.3f}s")
 
         # Calculate statistics
+        stats_start = time.time()
         result['statistics'] = self._calculate_statistics(
             pixel_clusters,
             self.layers
         )
+        print(f"Statistics calculation: {(time.time() - stats_start):.3f}s")
+        print("=" * 60)
 
         return result
 
@@ -132,6 +159,10 @@ class IconProcessor:
 
     def _perform_kmeans(self, colors, n_clusters):
         """Perform K-means clustering on superpixel colors"""
+        # Create weighted version of colors to reduce lightness influence
+        weighted_colors = colors.copy()
+        weighted_colors[:, 0] *= 0.65  # Reduce L channel influence to 65%
+
         kmeans = KMeans(
             n_clusters=n_clusters,
             random_state=42,
@@ -139,8 +170,29 @@ class IconProcessor:
             max_iter=300
         )
 
-        cluster_labels = kmeans.fit_predict(colors)
-        self.clusters = kmeans.cluster_centers_
+        cluster_labels = kmeans.fit_predict(weighted_colors)
+
+        # Store unweighted cluster centers for visualization
+        # We need to recalculate centers from original colors
+        self.clusters = np.zeros((n_clusters, 3))
+        for i in range(n_clusters):
+            mask = cluster_labels == i
+            if mask.any():
+                self.clusters[i] = colors[mask].mean(axis=0)
+
+        # Log K-means diagnostics
+        print("=" * 60)
+        print("K-MEANS CLUSTERING DIAGNOSTICS")
+        print("=" * 60)
+        print(f"Number of clusters requested: {n_clusters}")
+        print(f"Number of superpixels to cluster: {len(colors)}")
+        print(f"Lightness weighting: 0.65x (reduces L influence)")
+        print(f"Iterations to convergence: {kmeans.n_iter_}")
+        print(f"Max iterations allowed: 300")
+        print(f"Converged: {'YES' if kmeans.n_iter_ < 300 else 'NO (hit max iterations)'}")
+        print(f"Final inertia (sum of squared distances): {kmeans.inertia_:.2f}")
+        print(f"Number of features: {kmeans.n_features_in_} (LAB color channels)")
+        print("=" * 60)
 
         return cluster_labels
 

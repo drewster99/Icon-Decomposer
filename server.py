@@ -46,6 +46,9 @@ def serve_js():
 
 @app.route('/process', methods=['POST'])
 def process_image():
+    import time
+    start_time = time.time()
+
     try:
         if 'image' not in request.files:
             return jsonify({'error': 'No image file provided'}), 400
@@ -68,18 +71,37 @@ def process_image():
             'visualize_steps': request.form.get('visualize_steps', 'true') == 'true'
         }
 
-        # Save uploaded file
-        filename = secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        # Save uploaded file with UUID to prevent conflicts
+        original_filename = secure_filename(file.filename)
+        file_ext = os.path.splitext(original_filename)[1]
+        unique_filename = f"{os.urandom(8).hex()}{file_ext}"
+        filepath = os.path.join(app.config['UPLOAD_FOLDER'], unique_filename)
+
+        print("\n" + "=" * 60)
+        print("IMAGE PROCESSING REQUEST")
+        print("=" * 60)
+        print(f"Original filename: {file.filename}")
+        print(f"Saved as: {unique_filename}")
+        print(f"File size: {file.content_length if file.content_length else 'unknown'} bytes")
+        print("\nParameters:")
+        for key, value in params.items():
+            print(f"  {key}: {value}")
+        print("-" * 60)
+
+        save_time = time.time()
         file.save(filepath)
+        print(f"File save time: {(time.time() - save_time):.3f}s")
 
         # Process the image
+        process_start = time.time()
         result = processor.process_image(filepath, params)
+        print(f"Total processing time: {(time.time() - process_start):.3f}s")
 
         # Clean up uploaded file
         os.remove(filepath)
 
         # Convert numpy arrays to base64 for transmission
+        encoding_start = time.time()
         if 'layers' in result:
             for i, layer in enumerate(result['layers']):
                 img = Image.fromarray((layer * 255).astype(np.uint8), 'RGBA')
@@ -107,6 +129,10 @@ def process_image():
                     buffer = io.BytesIO()
                     img.save(buffer, format='PNG')
                     result['visualizations'][key] = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+        print(f"Response encoding: {(time.time() - encoding_start):.3f}s")
+        print(f"TOTAL REQUEST TIME: {(time.time() - start_time):.3f}s")
+        print("=" * 60 + "\n")
 
         return jsonify(result)
 

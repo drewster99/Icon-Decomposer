@@ -35,6 +35,7 @@ class IconDecomposer {
         this.baseName = document.getElementById('base-name');
         this.folderExample = document.getElementById('folder-example');
         this.suffixExample = document.getElementById('suffix-example');
+        this.iconBundleExample = document.getElementById('icon-bundle-example');
         this.selectedLayers = document.getElementById('selected-layers');
         this.exportPreview = document.getElementById('export-preview');
         this.exportBtn = document.getElementById('export-btn');
@@ -46,6 +47,7 @@ class IconDecomposer {
         // Layer selection state
         this.selectedLayerIndices = new Set();
         this.currentLayers = [];
+        this.layerStatistics = [];
     }
 
     initEventListeners() {
@@ -254,6 +256,7 @@ class IconDecomposer {
         this.currentLayers = layers;
         this.currentVisualizations = visualizations;
         this.currentStatistics = statistics;
+        this.layerStatistics = statistics.layer_sizes || [];
 
         // Clear previous selections and select all by default
         this.selectedLayerIndices.clear();
@@ -341,25 +344,47 @@ class IconDecomposer {
 
         // Get only selected layers
         const selectedLayers = [];
+        const selectedStats = [];
         const sortedIndices = Array.from(this.selectedLayerIndices).sort((a, b) => a - b);
         sortedIndices.forEach(index => {
             if (this.currentLayers[index]) {
                 selectedLayers.push(this.currentLayers[index]);
+                // Get pixel count for this layer
+                const stats = this.layerStatistics[index];
+                selectedStats.push(stats ? stats.pixel_count : 0);
             }
         });
 
         try {
-            const response = await fetch('/export', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    layers: selectedLayers,
-                    mode: exportMode,
-                    base_name: baseName
-                })
-            });
+            let response;
+
+            if (exportMode === 'icon-bundle') {
+                // Use new Icon Composer export endpoint
+                response = await fetch('/export-icon-bundle', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        layers: selectedLayers,
+                        base_name: baseName,
+                        layer_stats: selectedStats
+                    })
+                });
+            } else {
+                // Use existing export endpoint for folder/suffix modes
+                response = await fetch('/export', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        layers: selectedLayers,
+                        mode: exportMode,
+                        base_name: baseName
+                    })
+                });
+            }
 
             if (!response.ok) {
                 throw new Error('Export failed');
@@ -370,7 +395,9 @@ class IconDecomposer {
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `${baseName}_layers.zip`;
+            a.download = exportMode === 'icon-bundle'
+                ? `${baseName}.icon.zip`
+                : `${baseName}_layers.zip`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -435,6 +462,7 @@ class IconDecomposer {
         const baseName = this.baseName.value || 'icon';
         this.folderExample.textContent = `${baseName}/layer_0.png`;
         this.suffixExample.textContent = `${baseName}_0.png`;
+        this.iconBundleExample.textContent = `${baseName}.icon`;
     }
 
     handleLayerSelection(event, index) {

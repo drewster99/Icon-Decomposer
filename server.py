@@ -222,6 +222,105 @@ def reconstruct_layers():
         print(f"Error creating reconstruction: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/export-icon-bundle', methods=['POST'])
+def export_icon_bundle():
+    """Export layers as an Apple Icon Composer bundle (.icon)"""
+    try:
+        data = request.json
+        layers_data = data.get('layers', [])
+        base_name = data.get('base_name', 'icon')
+        layer_stats = data.get('layer_stats', [])  # Contains pixel counts for ordering
+
+        if not layers_data:
+            return jsonify({'error': 'No layers to export'}), 400
+
+        # Create temporary bundle directory
+        export_id = f"{base_name}_{os.urandom(4).hex()}"
+        bundle_name = f"{base_name}.icon"
+        bundle_path = os.path.join(app.config['EXPORT_FOLDER'], export_id, bundle_name)
+        assets_path = os.path.join(bundle_path, 'Assets')
+        os.makedirs(assets_path, exist_ok=True)
+
+        # Sort layers by pixel count (largest first for bottom-to-top ordering)
+        layer_info = []
+        for i, layer_b64 in enumerate(layers_data):
+            pixel_count = layer_stats[i] if i < len(layer_stats) else 1000000 - i
+            layer_info.append((i, layer_b64, pixel_count))
+        layer_info.sort(key=lambda x: x[2], reverse=True)
+
+        # Save layer images and prepare groups
+        groups = []
+        for idx, (original_idx, layer_b64, pixel_count) in enumerate(layer_info):
+            # Save PNG file
+            layer_data = base64.b64decode(layer_b64)
+            img = Image.open(io.BytesIO(layer_data))
+            image_filename = f"layer_{idx}.png"
+            img.save(os.path.join(assets_path, image_filename))
+
+            # Create group for this layer
+            is_bottom_layer = (idx == 0)  # First in list = largest = bottom layer
+
+            group = {
+                "hidden": False,
+                "layers": [
+                    {
+                        "image-name": image_filename,
+                        "name": f"layer_{idx}",
+                        "fill": "automatic",
+                        "hidden": False
+                    }
+                ],
+                "shadow": {
+                    "kind": "layer-color",
+                    "opacity": 0.5
+                },
+                "translucency": {
+                    "enabled": True,
+                    "value": 0.4
+                },
+                "lighting": "individual" if is_bottom_layer else "combined",
+                "specular": True
+            }
+
+            # Add glass effect only to bottom layer
+            if is_bottom_layer:
+                group["layers"][0]["glass"] = True
+
+            groups.append(group)
+
+        # Create icon.json
+        icon_json = {
+            "fill": "automatic",
+            "groups": groups,
+            "supported-platforms": {
+                "circles": ["watchOS"],
+                "squares": "shared"
+            }
+        }
+
+        # Write icon.json with proper formatting
+        icon_json_path = os.path.join(bundle_path, 'icon.json')
+        with open(icon_json_path, 'w') as f:
+            json.dump(icon_json, f, indent=2)
+
+        # Create ZIP file containing the .icon bundle
+        zip_path = os.path.join(app.config['EXPORT_FOLDER'], f"{export_id}")
+        shutil.make_archive(zip_path, 'zip',
+                          os.path.join(app.config['EXPORT_FOLDER'], export_id))
+
+        # Clean up temporary directory
+        shutil.rmtree(os.path.join(app.config['EXPORT_FOLDER'], export_id))
+
+        return send_file(f"{zip_path}.zip",
+                        as_attachment=True,
+                        download_name=f"{base_name}.icon.zip")
+
+    except Exception as e:
+        print(f"Error exporting icon bundle: {str(e)}")
+        import traceback
+        print(traceback.format_exc())
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/cleanup', methods=['POST'])
 def cleanup_exports():
     try:

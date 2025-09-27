@@ -31,8 +31,9 @@
         <div class="controls" id="controls" style="display: none;">
             <h2>Processing Parameters</h2>
 
-            <div class="control-group">
-                <label for="n-layers">Number of Layers</label>
+            <div class="controls-grid">
+                <div class="control-group">
+                    <label for="n-layers">Number of Layers</label>
                 <div class="slider-container">
                     <input type="range" id="n-layers" min="2" max="10" value="6" class="slider">
                     <span class="slider-value" id="n-layers-value">6</span>
@@ -66,8 +67,8 @@
             <div class="control-group" id="max-regions-group">
                 <label for="max-regions">Max Regions per Color</label>
                 <div class="slider-container">
-                    <input type="range" id="max-regions" min="1" max="5" value="3" class="slider">
-                    <span class="slider-value" id="max-regions-value">3</span>
+                    <input type="range" id="max-regions" min="1" max="5" value="2" class="slider">
+                    <span class="slider-value" id="max-regions-value">2</span>
                 </div>
                 <p class="control-help">Limits how many separate regions a single color can create</p>
             </div>
@@ -78,6 +79,7 @@
                     <option value="soft" selected>Soft (Anti-aliased)</option>
                     <option value="hard">Hard (Sharp edges)</option>
                 </select>
+            </div>
             </div>
 
             <button id="process-btn" class="btn btn-primary">Process Image</button>
@@ -100,6 +102,12 @@
 
             <div class="export-section">
                 <h3>Export Options</h3>
+
+                <!-- Preview Section -->
+                <div class="export-preview" id="export-preview">
+                    <!-- Original → Reconstruction preview will go here -->
+                </div>
+
                 <div class="export-controls">
                     <div class="input-group">
                         <label for="base-name">Export filename:</label>

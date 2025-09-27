@@ -35,6 +35,7 @@ class IconDecomposer {
         this.baseName = document.getElementById('base-name');
         this.folderExample = document.getElementById('folder-example');
         this.suffixExample = document.getElementById('suffix-example');
+        this.exportPreview = document.getElementById('export-preview');
         this.exportBtn = document.getElementById('export-btn');
         this.previewBtn = document.getElementById('preview-btn');
 
@@ -246,29 +247,7 @@ class IconDecomposer {
     displayLayers(layers, statistics, visualizations) {
         this.layersGrid.innerHTML = '';
 
-        // Add original image first
-        if (visualizations.original) {
-            const originalItem = document.createElement('div');
-            originalItem.className = 'layer-item special-item';
-            originalItem.innerHTML = `
-                <div class="layer-preview">
-                    <img src="data:image/png;base64,${visualizations.original}" alt="Original">
-                </div>
-                <div class="layer-info">
-                    <span class="layer-name">Original</span>
-                    <span class="layer-stats">Source Image</span>
-                </div>
-            `;
-            this.layersGrid.appendChild(originalItem);
-        }
-
-        // Add arrow indicator
-        const arrow = document.createElement('div');
-        arrow.className = 'arrow-indicator';
-        arrow.innerHTML = '→';
-        this.layersGrid.appendChild(arrow);
-
-        // Add each layer
+        // Just display the layers
         layers.forEach((layerData, index) => {
             const layerItem = document.createElement('div');
             layerItem.className = 'layer-item';
@@ -290,27 +269,8 @@ class IconDecomposer {
             this.layersGrid.appendChild(layerItem);
         });
 
-        // Add equals indicator
-        const equals = document.createElement('div');
-        equals.className = 'arrow-indicator';
-        equals.innerHTML = '=';
-        this.layersGrid.appendChild(equals);
-
-        // Add reconstruction preview last
-        if (visualizations.reconstruction) {
-            const reconstructionItem = document.createElement('div');
-            reconstructionItem.className = 'layer-item special-item';
-            reconstructionItem.innerHTML = `
-                <div class="layer-preview">
-                    <img src="data:image/png;base64,${visualizations.reconstruction}" alt="Reconstruction">
-                </div>
-                <div class="layer-info">
-                    <span class="layer-name">Reconstruction</span>
-                    <span class="layer-stats">Stacked Result</span>
-                </div>
-            `;
-            this.layersGrid.appendChild(reconstructionItem);
-        }
+        // Store visualizations for export section
+        this.displayExportPreview(visualizations);
     }
 
     displayStatistics(statistics) {
@@ -431,6 +391,46 @@ class IconDecomposer {
         const baseName = this.baseName.value || 'icon';
         this.folderExample.textContent = `${baseName}/layer_0.png`;
         this.suffixExample.textContent = `${baseName}_0.png`;
+    }
+
+    displayExportPreview(visualizations) {
+        if (!visualizations || !this.exportPreview) return;
+
+        this.exportPreview.innerHTML = '';
+
+        // Create container for the preview flow
+        const previewContainer = document.createElement('div');
+        previewContainer.className = 'preview-flow';
+
+        // Add original image
+        if (visualizations.original) {
+            const originalItem = document.createElement('div');
+            originalItem.className = 'preview-item';
+            originalItem.innerHTML = `
+                <img src="data:image/png;base64,${visualizations.original}" alt="Original">
+                <p>Original</p>
+            `;
+            previewContainer.appendChild(originalItem);
+        }
+
+        // Add arrow
+        const arrow = document.createElement('div');
+        arrow.className = 'preview-arrow';
+        arrow.innerHTML = '→';
+        previewContainer.appendChild(arrow);
+
+        // Add reconstruction
+        if (visualizations.reconstruction) {
+            const reconstructionItem = document.createElement('div');
+            reconstructionItem.className = 'preview-item';
+            reconstructionItem.innerHTML = `
+                <img src="data:image/png;base64,${visualizations.reconstruction}" alt="Reconstruction">
+                <p>Reconstruction</p>
+            `;
+            previewContainer.appendChild(reconstructionItem);
+        }
+
+        this.exportPreview.appendChild(previewContainer);
     }
 }
 

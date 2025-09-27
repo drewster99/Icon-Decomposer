@@ -98,8 +98,23 @@ header p {
     color: #2d3748;
 }
 
+/* Two-column layout for controls on wide screens */
+@media (min-width: 768px) {
+    .controls-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 2rem;
+    }
+}
+
 .control-group {
     margin-bottom: 1.5rem;
+}
+
+@media (min-width: 768px) {
+    .control-group {
+        margin-bottom: 0;
+    }
 }
 
 .control-group label {
@@ -325,12 +340,6 @@ select {
     padding: 0 0.5rem;
 }
 
-.layer-item.special-item {
-    border: 2px solid #667eea;
-    border-radius: 8px;
-    padding: 0.5rem;
-}
-
 /* Export Section */
 .export-section {
     border-top: 1px solid #e2e8f0;
@@ -373,6 +382,44 @@ select {
     border-radius: 4px;
     color: #2d3748;
     font-size: 0.9rem;
+}
+
+/* Export Preview */
+.export-preview {
+    margin: 1.5rem 0;
+    padding: 1.5rem;
+    background: #f7fafc;
+    border-radius: 8px;
+}
+
+.preview-flow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.preview-item {
+    text-align: center;
+}
+
+.preview-item img {
+    width: 120px;
+    height: 120px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 0.5rem;
+}
+
+.preview-item p {
+    font-weight: 500;
+    color: #4a5568;
+}
+
+.preview-arrow {
+    font-size: 2rem;
+    color: #4a5568;
 }
 
 /* Statistics */

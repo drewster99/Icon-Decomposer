@@ -63,7 +63,7 @@ Each cluster becomes a separate PNG with transparency, preserving the original c
 
 ### Number of Layers
 - **Range**: 2-10
-- **Default**: 6
+- **Default**: 4
 - **Effect**: Determines how many separate color layers to create
 
 ### Gradient Grouping (Compactness)
@@ -73,7 +73,7 @@ Each cluster becomes a separate PNG with transparency, preserving the original c
 
 ### Superpixel Detail
 - **Range**: 200-2000
-- **Default**: 800
+- **Default**: 1500
 - **Effect**: More superpixels = finer detail but slower processing
 
 ### Region Separation

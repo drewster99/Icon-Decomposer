@@ -36,9 +36,9 @@ A web-based tool for decomposing app icons (1024x1024 PNG/JPG) into separate col
 - **Export**: ZIP generation with selected layers only
 
 ## Default Settings
-- Number of Layers: 6
+- Number of Layers: 4
 - Gradient Grouping (Compactness): 25
-- Superpixel Detail: 800
+- Superpixel Detail: 1500
 - Region Separation: Off
 - Max Regions per Color: 2
 - Edge Mode: Soft (anti-aliased)

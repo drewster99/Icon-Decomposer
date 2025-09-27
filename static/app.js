@@ -35,12 +35,17 @@ class IconDecomposer {
         this.baseName = document.getElementById('base-name');
         this.folderExample = document.getElementById('folder-example');
         this.suffixExample = document.getElementById('suffix-example');
+        this.selectedLayers = document.getElementById('selected-layers');
         this.exportPreview = document.getElementById('export-preview');
         this.exportBtn = document.getElementById('export-btn');
         this.previewBtn = document.getElementById('preview-btn');
 
         // Loading overlay
         this.loading = document.getElementById('loading');
+
+        // Layer selection state
+        this.selectedLayerIndices = new Set();
+        this.currentLayers = [];
     }
 
     initEventListeners() {
@@ -246,16 +251,27 @@ class IconDecomposer {
 
     displayLayers(layers, statistics, visualizations) {
         this.layersGrid.innerHTML = '';
+        this.currentLayers = layers;
+        this.currentVisualizations = visualizations;
+        this.currentStatistics = statistics;
 
-        // Just display the layers
+        // Clear previous selections and select all by default
+        this.selectedLayerIndices.clear();
+
+        // Display the layers with checkboxes
         layers.forEach((layerData, index) => {
             const layerItem = document.createElement('div');
             layerItem.className = 'layer-item';
+            layerItem.dataset.index = index;
 
             const stats = statistics.layer_sizes[index] || {};
             const color = stats.average_color_rgb || [0, 0, 0];
 
+            // Select all layers by default
+            this.selectedLayerIndices.add(index);
+
             layerItem.innerHTML = `
+                <input type="checkbox" class="layer-checkbox" data-index="${index}" checked>
                 <div class="layer-preview">
                     <img src="data:image/png;base64,${layerData}" alt="Layer ${index}">
                 </div>
@@ -266,11 +282,25 @@ class IconDecomposer {
                 </div>
             `;
 
+            layerItem.classList.add('selected');
+
+            // Add click handler for checkbox
+            const checkbox = layerItem.querySelector('.layer-checkbox');
+            checkbox.addEventListener('change', (e) => this.handleLayerSelection(e, index));
+
+            // Add click handler for the whole item (except checkbox)
+            layerItem.addEventListener('click', (e) => {
+                if (e.target.type !== 'checkbox') {
+                    checkbox.checked = !checkbox.checked;
+                    this.handleLayerSelection({ target: checkbox }, index);
+                }
+            });
+
             this.layersGrid.appendChild(layerItem);
         });
 
-        // Store visualizations for export section
-        this.displayExportPreview(visualizations);
+        // Update export preview with all layers selected
+        this.updateExportPreview();
     }
 
     displayStatistics(statistics) {
@@ -294,8 +324,13 @@ class IconDecomposer {
     }
 
     async exportLayers() {
-        if (!this.processedData || !this.processedData.layers) {
+        if (!this.currentLayers || this.currentLayers.length === 0) {
             alert('No layers to export');
+            return;
+        }
+
+        if (this.selectedLayerIndices.size === 0) {
+            alert('Please select at least one layer to export');
             return;
         }
 
@@ -304,6 +339,15 @@ class IconDecomposer {
         const exportMode = document.querySelector('input[name="export-mode"]:checked').value;
         const baseName = this.baseName.value || 'icon';
 
+        // Get only selected layers
+        const selectedLayers = [];
+        const sortedIndices = Array.from(this.selectedLayerIndices).sort((a, b) => a - b);
+        sortedIndices.forEach(index => {
+            if (this.currentLayers[index]) {
+                selectedLayers.push(this.currentLayers[index]);
+            }
+        });
+
         try {
             const response = await fetch('/export', {
                 method: 'POST',
@@ -311,7 +355,7 @@ class IconDecomposer {
                     'Content-Type': 'application/json',
                 },
                 body: JSON.stringify({
-                    layers: this.processedData.layers,
+                    layers: selectedLayers,
                     mode: exportMode,
                     base_name: baseName
                 })
@@ -393,8 +437,66 @@ class IconDecomposer {
         this.suffixExample.textContent = `${baseName}_0.png`;
     }
 
-    displayExportPreview(visualizations) {
-        if (!visualizations || !this.exportPreview) return;
+    handleLayerSelection(event, index) {
+        const checkbox = event.target;
+        const layerItem = this.layersGrid.querySelector(`[data-index="${index}"]`);
+
+        if (checkbox.checked) {
+            this.selectedLayerIndices.add(index);
+            layerItem.classList.add('selected');
+        } else {
+            this.selectedLayerIndices.delete(index);
+            layerItem.classList.remove('selected');
+        }
+
+        // Update export preview
+        this.updateExportPreview();
+    }
+
+    async updateExportPreview() {
+        if (!this.currentLayers || !this.currentVisualizations) return;
+
+        // Show selected layers in export section
+        this.displaySelectedLayers();
+
+        // Request new reconstruction with only selected layers
+        await this.updateReconstruction();
+    }
+
+    displaySelectedLayers() {
+        if (!this.selectedLayers) return;
+
+        this.selectedLayers.innerHTML = '';
+
+        if (this.selectedLayerIndices.size === 0) {
+            this.selectedLayers.innerHTML = '<p style="color: #718096; text-align: center;">No layers selected for export</p>';
+            return;
+        }
+
+        const selectedContainer = document.createElement('div');
+        selectedContainer.className = 'selected-layers-grid';
+
+        // Sort indices to maintain order
+        const sortedIndices = Array.from(this.selectedLayerIndices).sort((a, b) => a - b);
+
+        sortedIndices.forEach(index => {
+            const layerData = this.currentLayers[index];
+            const stats = this.currentStatistics.layer_sizes[index] || {};
+
+            const item = document.createElement('div');
+            item.className = 'selected-layer-item';
+            item.innerHTML = `
+                <img src="data:image/png;base64,${layerData}" alt="Layer ${index}">
+                <p>Layer ${index}</p>
+            `;
+            selectedContainer.appendChild(item);
+        });
+
+        this.selectedLayers.appendChild(selectedContainer);
+    }
+
+    async updateReconstruction() {
+        if (!this.exportPreview) return;
 
         this.exportPreview.innerHTML = '';
 
@@ -403,11 +505,11 @@ class IconDecomposer {
         previewContainer.className = 'preview-flow';
 
         // Add original image
-        if (visualizations.original) {
+        if (this.currentVisualizations.original) {
             const originalItem = document.createElement('div');
             originalItem.className = 'preview-item';
             originalItem.innerHTML = `
-                <img src="data:image/png;base64,${visualizations.original}" alt="Original">
+                <img src="data:image/png;base64,${this.currentVisualizations.original}" alt="Original">
                 <p>Original</p>
             `;
             previewContainer.appendChild(originalItem);
@@ -419,15 +521,55 @@ class IconDecomposer {
         arrow.innerHTML = '→';
         previewContainer.appendChild(arrow);
 
-        // Add reconstruction
-        if (visualizations.reconstruction) {
-            const reconstructionItem = document.createElement('div');
-            reconstructionItem.className = 'preview-item';
-            reconstructionItem.innerHTML = `
-                <img src="data:image/png;base64,${visualizations.reconstruction}" alt="Reconstruction">
-                <p>Reconstruction</p>
+        // Create reconstruction from selected layers
+        if (this.selectedLayerIndices.size > 0) {
+            // Request reconstruction from backend
+            try {
+                const response = await fetch('/reconstruct', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        layers: this.currentLayers,
+                        selected: Array.from(this.selectedLayerIndices)
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.reconstruction) {
+                        const reconstructionItem = document.createElement('div');
+                        reconstructionItem.className = 'preview-item';
+                        reconstructionItem.innerHTML = `
+                            <img src="data:image/png;base64,${data.reconstruction}" alt="Reconstruction">
+                            <p>Reconstruction (${this.selectedLayerIndices.size} layers)</p>
+                        `;
+                        previewContainer.appendChild(reconstructionItem);
+                    }
+                } else {
+                    // Fallback to original reconstruction
+                    const reconstructionItem = document.createElement('div');
+                    reconstructionItem.className = 'preview-item';
+                    reconstructionItem.innerHTML = `
+                        <img src="data:image/png;base64,${this.currentVisualizations.reconstruction}" alt="Reconstruction">
+                        <p>Reconstruction (${this.selectedLayerIndices.size} layers)</p>
+                    `;
+                    previewContainer.appendChild(reconstructionItem);
+                }
+            } catch (error) {
+                console.error('Error getting reconstruction:', error);
+            }
+        } else {
+            const emptyItem = document.createElement('div');
+            emptyItem.className = 'preview-item';
+            emptyItem.innerHTML = `
+                <div style="width: 150px; height: 150px; background: #f0f0f0; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #718096;">
+                    No layers
+                </div>
+                <p>No Reconstruction</p>
             `;
-            previewContainer.appendChild(reconstructionItem);
+            previewContainer.appendChild(emptyItem);
         }
 
         this.exportPreview.appendChild(previewContainer);

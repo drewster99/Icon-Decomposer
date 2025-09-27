@@ -291,6 +291,28 @@ select {
 
 .layer-item {
     text-align: center;
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    opacity: 0.6;
+}
+
+.layer-item.selected {
+    opacity: 1;
+}
+
+.layer-item:hover {
+    transform: scale(1.05);
+}
+
+.layer-checkbox {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    width: 20px;
+    height: 20px;
+    cursor: pointer;
+    z-index: 2;
 }
 
 .layer-preview {
@@ -405,11 +427,12 @@ select {
 }
 
 .preview-item img {
-    width: 120px;
-    height: 120px;
+    width: 150px;
+    height: 150px;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     margin-bottom: 0.5rem;
+    object-fit: contain;
 }
 
 .preview-item p {
@@ -419,6 +442,36 @@ select {
 
 .preview-arrow {
     font-size: 2rem;
+    color: #4a5568;
+}
+
+/* Selected Layers Display */
+.selected-layers {
+    margin-bottom: 2rem;
+}
+
+.selected-layers-grid {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.selected-layer-item {
+    text-align: center;
+}
+
+.selected-layer-item img {
+    width: 100px;
+    height: 100px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    margin-bottom: 0.25rem;
+}
+
+.selected-layer-item p {
+    font-size: 0.85rem;
     color: #4a5568;
 }
 

@@ -172,6 +172,56 @@ def export_layers():
         print(f"Error exporting layers: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/reconstruct', methods=['POST'])
+def reconstruct_layers():
+    """Generate reconstruction from selected layers"""
+    try:
+        data = request.json
+        layers_data = data.get('layers', [])
+        selected_indices = data.get('selected', [])
+
+        if not layers_data or not selected_indices:
+            return jsonify({'reconstruction': None})
+
+        # Decode layers
+        layers = []
+        for idx in selected_indices:
+            if idx < len(layers_data):
+                layer_b64 = layers_data[idx]
+                layer_data = base64.b64decode(layer_b64)
+                img = Image.open(io.BytesIO(layer_data))
+                layers.append(np.array(img))
+
+        # Create reconstruction
+        reconstruction = np.zeros((1024, 1024, 4), dtype=np.float32)
+        for layer in layers:
+            # Convert to float if needed
+            if layer.dtype == np.uint8:
+                layer = layer.astype(np.float32) / 255.0
+
+            # Add layer to reconstruction
+            alpha = layer[:, :, 3:4]
+            reconstruction[:, :, :3] += layer[:, :, :3] * alpha
+            # Update alpha channel
+            reconstruction[:, :, 3] = np.maximum(reconstruction[:, :, 3], layer[:, :, 3])
+
+        # Clip and convert to uint8
+        reconstruction = np.clip(reconstruction * 255, 0, 255).astype(np.uint8)
+
+        # Convert to image
+        img = Image.fromarray(reconstruction, 'RGBA')
+
+        # Convert to base64
+        buffer = io.BytesIO()
+        img.save(buffer, format='PNG')
+        reconstruction_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
+
+        return jsonify({'reconstruction': reconstruction_b64})
+
+    except Exception as e:
+        print(f"Error creating reconstruction: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/cleanup', methods=['POST'])
 def cleanup_exports():
     try:

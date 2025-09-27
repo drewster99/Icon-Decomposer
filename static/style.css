@@ -9,12 +9,15 @@ body {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     min-height: 100vh;
     color: #333;
+    overflow-x: hidden;
 }
 
 .container {
     max-width: 1400px;
     margin: 0 auto;
     padding: 2rem;
+    width: 100%;
+    box-sizing: border-box;
 }
 
 header {
@@ -40,6 +43,8 @@ header p {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .drop-zone {
@@ -50,6 +55,11 @@ header p {
     cursor: pointer;
     transition: all 0.3s ease;
     background: #fafafa;
+    min-height: 350px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
 }
 
 .drop-zone:hover {
@@ -91,6 +101,8 @@ header p {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .controls h2 {
@@ -214,6 +226,7 @@ select {
     background: #667eea;
     color: white;
     width: 100%;
+    margin-top: 1.5rem;
 }
 
 .btn-primary:hover {
@@ -247,12 +260,14 @@ select {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .viz-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 1.5rem;
     margin-top: 1.5rem;
 }
 
@@ -262,9 +277,18 @@ select {
 
 .viz-item img {
     width: 100%;
+    aspect-ratio: 1;
+    object-fit: contain;
     border-radius: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     margin-bottom: 0.5rem;
+    background: repeating-linear-gradient(
+        45deg,
+        #f0f0f0,
+        #f0f0f0 10px,
+        #fafafa 10px,
+        #fafafa 20px
+    );
 }
 
 .viz-item p {
@@ -280,6 +304,8 @@ select {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .layers-grid {

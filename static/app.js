@@ -71,26 +71,26 @@ class IconDecomposer {
             }
         });
 
-        // Slider updates
+        // Slider updates - update display on input, process on change (mouse release)
         this.nLayersSlider.addEventListener('input', (e) => {
             this.nLayersValue.textContent = e.target.value;
-            this.scheduleReprocess();
         });
+        this.nLayersSlider.addEventListener('change', () => this.scheduleReprocess());
 
         this.compactnessSlider.addEventListener('input', (e) => {
             this.compactnessValue.textContent = e.target.value;
-            this.scheduleReprocess();
         });
+        this.compactnessSlider.addEventListener('change', () => this.scheduleReprocess());
 
         this.nSegmentsSlider.addEventListener('input', (e) => {
             this.nSegmentsValue.textContent = e.target.value;
-            this.scheduleReprocess();
         });
+        this.nSegmentsSlider.addEventListener('change', () => this.scheduleReprocess());
 
         this.maxRegionsSlider.addEventListener('input', (e) => {
             this.maxRegionsValue.textContent = e.target.value;
-            this.scheduleReprocess();
         });
+        this.maxRegionsSlider.addEventListener('change', () => this.scheduleReprocess());
 
         // Select changes
         this.distanceThreshold.addEventListener('change', () => {

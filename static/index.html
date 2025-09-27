@@ -57,28 +57,30 @@
             </div>
 
             <div class="control-group">
-                <label for="distance-threshold">Region Separation</label>
-                <select id="distance-threshold">
-                    <option value="auto" selected>Auto (Smart)</option>
-                    <option value="off">Off (Keep together)</option>
-                </select>
-            </div>
-
-            <div class="control-group" id="max-regions-group">
-                <label for="max-regions">Max Regions per Color</label>
-                <div class="slider-container">
-                    <input type="range" id="max-regions" min="1" max="5" value="2" class="slider">
-                    <span class="slider-value" id="max-regions-value">2</span>
-                </div>
-                <p class="control-help">Limits how many separate regions a single color can create</p>
-            </div>
-
-            <div class="control-group">
                 <label for="edge-mode">Edge Handling</label>
                 <select id="edge-mode">
                     <option value="soft" selected>Soft (Anti-aliased)</option>
                     <option value="hard">Hard (Sharp edges)</option>
                 </select>
+            </div>
+
+            <div class="control-group-combined">
+                <div class="control-group">
+                    <label for="distance-threshold">Region Separation</label>
+                    <select id="distance-threshold">
+                        <option value="off" selected>Off (Keep together)</option>
+                        <option value="auto">Auto (Smart)</option>
+                    </select>
+                </div>
+
+                <div class="control-group" id="max-regions-group" style="display: none;">
+                    <label for="max-regions">Max Regions per Color</label>
+                    <div class="slider-container">
+                        <input type="range" id="max-regions" min="1" max="5" value="2" class="slider">
+                        <span class="slider-value" id="max-regions-value">2</span>
+                    </div>
+                    <p class="control-help">Limits how many separate regions a single color can create</p>
+                </div>
             </div>
             </div>
 

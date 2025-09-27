@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Icon Decomposer</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Icon Decomposer</h1>
+            <p>Decompose app icons into separate color layers</p>
+        </header>
+
+        <!-- Upload Section -->
+        <div class="upload-section">
+            <div id="drop-zone" class="drop-zone">
+                <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+                <p>Drag & drop your 1024×1024 icon here</p>
+                <p class="small">or click to browse</p>
+                <input type="file" id="file-input" accept=".png,.jpg,.jpeg" hidden>
+            </div>
+        </div>
+
+        <!-- Controls Section -->
+        <div class="controls" id="controls" style="display: none;">
+            <h2>Processing Parameters</h2>
+
+            <div class="control-group">
+                <label for="n-layers">Number of Layers</label>
+                <div class="slider-container">
+                    <input type="range" id="n-layers" min="2" max="10" value="6" class="slider">
+                    <span class="slider-value" id="n-layers-value">6</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label for="compactness">Gradient Grouping (Compactness)</label>
+                <div class="slider-container">
+                    <input type="range" id="compactness" min="5" max="50" value="20" class="slider">
+                    <span class="slider-value" id="compactness-value">20</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label for="n-segments">Superpixel Detail</label>
+                <div class="slider-container">
+                    <input type="range" id="n-segments" min="200" max="2000" value="800" step="100" class="slider">
+                    <span class="slider-value" id="n-segments-value">800</span>
+                </div>
+            </div>
+
+            <div class="control-group">
+                <label for="distance-threshold">Region Separation</label>
+                <select id="distance-threshold">
+                    <option value="auto" selected>Auto (Smart)</option>
+                    <option value="off">Off (Keep together)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="edge-mode">Edge Handling</label>
+                <select id="edge-mode">
+                    <option value="soft" selected>Soft (Anti-aliased)</option>
+                    <option value="hard">Hard (Sharp edges)</option>
+                </select>
+            </div>
+
+            <button id="process-btn" class="btn btn-primary">Process Image</button>
+        </div>
+
+        <!-- Visualization Section -->
+        <div class="visualizations" id="visualizations" style="display: none;">
+            <h2>Processing Steps</h2>
+            <div class="viz-grid" id="viz-grid">
+                <!-- Visualizations will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Results Section -->
+        <div class="results" id="results" style="display: none;">
+            <h2>Decomposed Layers</h2>
+            <div class="layers-grid" id="layers-grid">
+                <!-- Layer previews will be inserted here -->
+            </div>
+
+            <div class="export-section">
+                <h3>Export Options</h3>
+                <div class="export-controls">
+                    <input type="text" id="base-name" placeholder="Enter base name" value="icon" class="text-input">
+                    <div class="radio-group">
+                        <label>
+                            <input type="radio" name="export-mode" value="folder" checked>
+                            <span>Folder mode (basename/layer_0.png)</span>
+                        </label>
+                        <label>
+                            <input type="radio" name="export-mode" value="suffix">
+                            <span>Suffix mode (basename_0.png)</span>
+                        </label>
+                    </div>
+                    <button id="export-btn" class="btn btn-success">Export All Layers</button>
+                    <button id="preview-btn" class="btn btn-secondary">Generate Preview</button>
+                </div>
+            </div>
+
+            <!-- Statistics -->
+            <div class="statistics" id="statistics">
+                <!-- Statistics will be inserted here -->
+            </div>
+        </div>
+
+        <!-- Loading Overlay -->
+        <div class="loading-overlay" id="loading" style="display: none;">
+            <div class="spinner"></div>
+            <p>Processing image...</p>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

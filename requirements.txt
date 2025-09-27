@@ -1,0 +1,8 @@
+Flask==3.0.0
+flask-cors==4.0.0
+Pillow==10.2.0
+numpy==1.26.3
+scikit-image==0.22.0
+scikit-learn==1.4.0
+opencv-python==4.9.0.80
+Werkzeug==3.0.1

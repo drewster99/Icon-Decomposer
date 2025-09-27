@@ -203,9 +203,19 @@ class IconProcessor:
     def _generate_layers(self, image, pixel_clusters, edge_mode):
         """Generate individual layer images with transparency"""
         unique_clusters = np.unique(pixel_clusters)
+
+        # Calculate size of each cluster for sorting
+        cluster_sizes = []
+        for cluster_id in unique_clusters:
+            size = np.sum(pixel_clusters == cluster_id)
+            cluster_sizes.append((cluster_id, size))
+
+        # Sort by size (largest first)
+        cluster_sizes.sort(key=lambda x: x[1], reverse=True)
+
         layers = []
 
-        for cluster_id in unique_clusters:
+        for cluster_id, _ in cluster_sizes:
             # Create mask for this cluster
             mask = (pixel_clusters == cluster_id).astype(np.float32)
 
@@ -306,5 +316,9 @@ class IconProcessor:
                 'percentage': round(percentage, 2),
                 'average_color_rgb': avg_color
             })
+
+        # Sort statistics by pixel count as well (though layers are already sorted)
+        # This ensures consistency
+        stats['layer_sizes'].sort(key=lambda x: x['pixel_count'], reverse=True)
 
         return stats

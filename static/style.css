@@ -16,8 +16,6 @@ body {
     max-width: 1400px;
     margin: 0 auto;
     padding: 2rem;
-    width: 100%;
-    box-sizing: border-box;
 }
 
 header {
@@ -43,8 +41,6 @@ header p {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    box-sizing: border-box;
 }
 
 .drop-zone {
@@ -101,8 +97,6 @@ header p {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    box-sizing: border-box;
 }
 
 .controls h2 {
@@ -260,8 +254,6 @@ select {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    box-sizing: border-box;
 }
 
 .viz-grid {
@@ -304,8 +296,6 @@ select {
     padding: 2rem;
     margin-bottom: 2rem;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-    width: 100%;
-    box-sizing: border-box;
 }
 
 .layers-grid {

@@ -4,6 +4,32 @@ class IconDecomposer {
         this.processedData = null;
         this.initElements();
         this.initEventListeners();
+
+        // Initialize layer grouping
+        this.layerGrouping = new LayerGrouping(this);
+
+        // Set up preview ready handler for async updates
+        this.onPreviewReady = (layerIndices, dataUrl, isSelected) => {
+            // Find which group these layers belong to
+            this.layerGrouping.groups.forEach((group, groupIdx) => {
+                const selectedInGroup = group.filter(idx => this.selectedLayerIndices.has(idx));
+                const layersBeingShown = selectedInGroup.length > 0 ? selectedInGroup : group;
+
+                // Check if this matches the layers we just rendered
+                if (layersBeingShown.length === layerIndices.length &&
+                    layersBeingShown.every(idx => layerIndices.includes(idx))) {
+
+                    // Update the preview in the DOM
+                    const groupElement = document.querySelector(`.layer-group[data-group-index="${groupIdx}"]`);
+                    if (groupElement) {
+                        const previewImg = groupElement.querySelector('.layer-preview img');
+                        if (previewImg) {
+                            previewImg.src = dataUrl;
+                        }
+                    }
+                }
+            });
+        };
     }
 
     initElements() {
@@ -45,9 +71,15 @@ class IconDecomposer {
         this.loading = document.getElementById('loading');
 
         // Layer selection state
-        this.selectedLayerIndices = new Set();
+        this.selectedLayerIndices = new Set();  // Individual layer selection
+        this.selectedGroupIndices = new Set();  // Group-level selection
         this.currentLayers = [];
         this.layerStatistics = [];
+
+        // Layer grouping state
+        this.layerGroups = [];  // Array of arrays, each sub-array contains layer indices in that group
+        this.expandedGroups = new Set();  // Track which groups are expanded
+        this.draggedItem = null;
     }
 
     initEventListeners() {
@@ -112,6 +144,20 @@ class IconDecomposer {
 
         // Update export examples when base name changes
         this.baseName.addEventListener('input', () => this.updateExportExamples());
+
+        // Close expanded groups when clicking on the parent section (not on layer items)
+        const layersSection = this.layersGrid.parentElement;
+        if (layersSection) {
+            layersSection.addEventListener('click', (e) => {
+                // If we clicked directly on the section or grid (not a child element)
+                if (e.target === layersSection || e.target === this.layersGrid) {
+                    if (this.layerGrouping && this.layerGrouping.expandedGroups.size > 0) {
+                        this.layerGrouping.expandedGroups.clear();
+                        this.renderLayerGroups();
+                    }
+                }
+            });
+        }
     }
 
     handleFileSelect(file) {
@@ -258,52 +304,315 @@ class IconDecomposer {
         this.currentStatistics = statistics;
         this.layerStatistics = statistics.layer_sizes || [];
 
+        // Initialize grouping (ensure layerGrouping exists first)
+        if (!this.layerGrouping) {
+            this.layerGrouping = new LayerGrouping(this);
+
+            // Also set up the preview ready handler if not already done
+            if (!this.onPreviewReady) {
+                this.onPreviewReady = (layerIndices, dataUrl, isSelected) => {
+                    // Find which group these layers belong to
+                    this.layerGrouping.groups.forEach((group, groupIdx) => {
+                        const selectedInGroup = group.filter(idx => this.selectedLayerIndices.has(idx));
+                        const layersBeingShown = selectedInGroup.length > 0 ? selectedInGroup : group;
+
+                        // Check if this matches the layers we just rendered
+                        if (layersBeingShown.length === layerIndices.length &&
+                            layersBeingShown.every(idx => layerIndices.includes(idx))) {
+
+                            // Update the preview in the DOM
+                            const groupElement = document.querySelector(`.layer-group[data-group-index="${groupIdx}"]`);
+                            if (groupElement) {
+                                const previewImg = groupElement.querySelector('.layer-preview img');
+                                if (previewImg) {
+                                    previewImg.src = dataUrl;
+                                }
+                            }
+                        }
+                    });
+                };
+            }
+        }
+        this.layerGrouping.initializeGroups(layers.length);
+
         // Clear previous selections and select all by default
         this.selectedLayerIndices.clear();
+        this.selectedGroupIndices.clear();
+        layers.forEach((_, index) => this.selectedLayerIndices.add(index));
 
-        // Display the layers with checkboxes
-        layers.forEach((layerData, index) => {
-            const layerItem = document.createElement('div');
-            layerItem.className = 'layer-item';
-            layerItem.dataset.index = index;
-
-            const stats = statistics.layer_sizes[index] || {};
-            const color = stats.average_color_rgb || [0, 0, 0];
-
-            // Select all layers by default
-            this.selectedLayerIndices.add(index);
-
-            layerItem.innerHTML = `
-                <input type="checkbox" class="layer-checkbox" data-index="${index}" checked>
-                <div class="layer-preview">
-                    <img src="data:image/png;base64,${layerData}" alt="Layer ${index}">
-                </div>
-                <div class="layer-info">
-                    <span class="layer-name">Layer ${index}</span>
-                    <span class="layer-stats">${stats.percentage}% • ${this.formatNumber(stats.pixel_count)} px</span>
-                    <div style="width: 20px; height: 20px; background: rgb(${color.join(',')}); border-radius: 4px; margin: 0.25rem auto; border: 1px solid #ddd;"></div>
-                </div>
-            `;
-
-            layerItem.classList.add('selected');
-
-            // Add click handler for checkbox
-            const checkbox = layerItem.querySelector('.layer-checkbox');
-            checkbox.addEventListener('change', (e) => this.handleLayerSelection(e, index));
-
-            // Add click handler for the whole item (except checkbox)
-            layerItem.addEventListener('click', (e) => {
-                if (e.target.type !== 'checkbox') {
-                    checkbox.checked = !checkbox.checked;
-                    this.handleLayerSelection({ target: checkbox }, index);
-                }
-            });
-
-            this.layersGrid.appendChild(layerItem);
+        // Mark all groups as selected initially
+        this.layerGrouping.groups.forEach((_, groupIndex) => {
+            this.selectedGroupIndices.add(groupIndex);
         });
+
+        // Render layers with grouping support
+        this.renderLayerGroups();
 
         // Update export preview with all layers selected
         this.updateExportPreview();
+    }
+
+    renderLayerGroups() {
+        this.layersGrid.innerHTML = '';
+
+        this.layerGrouping.groups.forEach((group, groupIndex) => {
+            if (group.length === 0) return;
+
+            // Always render as a group for consistency
+            this.renderLayerGroup(group, groupIndex);
+        });
+    }
+
+    renderSingleLayer(layerIndex, groupIndex) {
+        const layerData = this.currentLayers[layerIndex];
+        const stats = this.layerStatistics[layerIndex] || {};
+        const color = stats.average_color_rgb || [0, 0, 0];
+        const isSelected = this.selectedLayerIndices.has(layerIndex);
+
+        const layerItem = document.createElement('div');
+        layerItem.className = 'layer-item' + (isSelected ? ' selected' : '');
+        layerItem.dataset.layerIndex = layerIndex;
+        layerItem.dataset.groupIndex = groupIndex;
+
+        layerItem.innerHTML = `
+            <input type="checkbox" class="layer-checkbox" data-index="${layerIndex}" ${isSelected ? 'checked' : ''}>
+            <div class="layer-preview">
+                <img src="data:image/png;base64,${layerData}" alt="Layer ${layerIndex}">
+            </div>
+            <div class="layer-info">
+                <span class="layer-name">Layer ${layerIndex}</span>
+                <span class="layer-stats">${stats.percentage}% • ${this.formatNumber(stats.pixel_count)} px</span>
+                <div style="width: 20px; height: 20px; background: rgb(${color.join(',')}); border-radius: 4px; margin: 0.25rem auto; border: 1px solid #ddd;"></div>
+            </div>
+        `;
+
+        // Add event handlers
+        const checkbox = layerItem.querySelector('.layer-checkbox');
+        checkbox.addEventListener('change', (e) => this.handleLayerSelection(e, layerIndex));
+
+        layerItem.addEventListener('click', (e) => {
+            if (e.target.type !== 'checkbox') {
+                checkbox.checked = !checkbox.checked;
+                this.handleLayerSelection({ target: checkbox }, layerIndex);
+            }
+        });
+
+        // Set up drag and drop
+        this.layerGrouping.setupDragAndDrop(layerItem, 'layer', layerIndex);
+
+        this.layersGrid.appendChild(layerItem);
+    }
+
+    renderLayerGroup(group, groupIndex) {
+        const isExpanded = this.layerGrouping.expandedGroups.has(groupIndex);
+        const groupItem = document.createElement('div');
+        groupItem.className = 'layer-group' + (isExpanded ? ' expanded' : '');
+        groupItem.dataset.groupIndex = groupIndex;
+
+        // Calculate group stats from selected layers only
+        let totalPixels = 0;
+        let totalPercentage = 0;
+        let avgColor = [0, 0, 0];
+        let colorWeightSum = 0;
+
+        group.forEach(idx => {
+            // Only count selected layers for stats
+            if (this.selectedLayerIndices.has(idx)) {
+                const stats = this.layerStatistics[idx] || {};
+                const pixelCount = stats.pixel_count || 0;
+                totalPixels += pixelCount;
+                totalPercentage += stats.percentage || 0;
+
+                // Calculate weighted average color
+                if (stats.average_color_rgb) {
+                    avgColor[0] += stats.average_color_rgb[0] * pixelCount;
+                    avgColor[1] += stats.average_color_rgb[1] * pixelCount;
+                    avgColor[2] += stats.average_color_rgb[2] * pixelCount;
+                    colorWeightSum += pixelCount;
+                }
+            }
+        });
+
+        // Normalize the weighted average color
+        if (colorWeightSum > 0) {
+            avgColor[0] = Math.round(avgColor[0] / colorWeightSum);
+            avgColor[1] = Math.round(avgColor[1] / colorWeightSum);
+            avgColor[2] = Math.round(avgColor[2] / colorWeightSum);
+        }
+
+        const isGroupSelected = this.selectedGroupIndices.has(groupIndex);
+        const selectedLayersInGroup = group.filter(idx => this.selectedLayerIndices.has(idx));
+        const allLayersSelected = selectedLayersInGroup.length === group.length;
+        const someLayersSelected = selectedLayersInGroup.length > 0;
+
+        // Show selected layers only, empty if none selected
+        let mergedPreview;
+        if (selectedLayersInGroup.length === 0) {
+            // Create empty dimmed preview
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+
+            // Draw checkerboard
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, 256, 256);
+            ctx.fillStyle = '#fafafa';
+            for (let x = 0; x < 256; x += 20) {
+                for (let y = 0; y < 256; y += 20) {
+                    if ((x / 20 + y / 20) % 2 === 0) {
+                        ctx.fillRect(x, y, 20, 20);
+                    }
+                }
+            }
+
+            // Add dimming
+            ctx.globalAlpha = 0.3;
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+            ctx.fillRect(0, 0, 256, 256);
+
+            mergedPreview = canvas.toDataURL('image/png');
+        } else {
+            mergedPreview = this.layerGrouping.createMergedPreview(
+                selectedLayersInGroup,
+                isGroupSelected && selectedLayersInGroup.length > 0  // Bright if group selected and has selected layers
+            );
+        }
+
+        // Determine the group name
+        const groupName = group.length === 1
+            ? `Layer ${group[0]}`
+            : `L ${group.join('+')}`;
+
+        // Show color square for all groups (weighted average for multi-layer)
+        const colorSquare = colorWeightSum > 0
+            ? `<div class="color-square" style="background-color: rgb(${avgColor[0]}, ${avgColor[1]}, ${avgColor[2]})"></div>`
+            : `<div class="color-square" style="visibility: hidden;"></div>`;
+
+        groupItem.innerHTML = `
+            <div class="layer-card">
+                <div class="layer-preview-container">
+                    <input type="checkbox" class="group-checkbox" data-group-index="${groupIndex}" ${isGroupSelected ? 'checked' : ''}>
+                    <div class="layer-preview ${group.length > 1 ? 'stacked' : ''}">
+                        <img src="${mergedPreview}" alt="${groupName}">
+                    </div>
+                </div>
+                <div class="layer-info">
+                    <div class="layer-name">${groupName}</div>
+                    <div class="layer-stats">${totalPercentage.toFixed(2)}% • ${this.formatNumber(totalPixels)} px</div>
+                    ${colorSquare}
+                    ${group.length > 1 ? `<button class="expand-toggle">${isExpanded ? '▼' : '▶'}</button>` : ''}
+                </div>
+            </div>
+        `;
+
+        // Add event handlers
+        const card = groupItem.querySelector('.layer-card');
+        const expandBtn = groupItem.querySelector('.expand-toggle');
+        const checkbox = groupItem.querySelector('.group-checkbox');
+
+        if (expandBtn) {
+            expandBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this.layerGrouping.toggleGroupExpansion(groupIndex);
+                this.renderLayerGroups();
+            });
+        }
+
+        checkbox.addEventListener('change', (e) => {
+            e.stopPropagation();
+
+            // Update group selection state
+            if (e.target.checked) {
+                this.selectedGroupIndices.add(groupIndex);
+            } else {
+                this.selectedGroupIndices.delete(groupIndex);
+            }
+
+            // Use the same update function for consistency
+            this.updateGroupPreview(groupIndex);
+            this.updateExportPreview();
+            // Update visual state of layers in expanded group if visible
+            if (isExpanded) {
+                this.renderLayerGroups();
+            }
+        });
+
+        // Set up drag and drop for group
+        this.layerGrouping.setupDragAndDrop(card, 'group', groupIndex);
+
+        this.layersGrid.appendChild(groupItem);
+
+        // Render individual layers if expanded
+        if (isExpanded) {
+            const contents = document.createElement('div');
+            contents.className = 'group-contents';
+
+            group.forEach(layerIndex => {
+                const layerData = this.currentLayers[layerIndex];
+                const stats = this.layerStatistics[layerIndex] || {};
+                const color = stats.average_color_rgb || [0, 0, 0];
+                const isSelected = this.selectedLayerIndices.has(layerIndex);
+
+                const layerItem = document.createElement('div');
+                layerItem.className = 'layer-item grouped' + (isSelected ? ' selected' : '');
+                layerItem.dataset.layerIndex = layerIndex;
+                layerItem.dataset.groupIndex = groupIndex;
+
+                layerItem.innerHTML = `
+                    <input type="checkbox" class="layer-checkbox" data-index="${layerIndex}" ${isSelected ? 'checked' : ''}>
+                    <div class="layer-preview">
+                        <img src="data:image/png;base64,${layerData}" alt="Layer ${layerIndex}">
+                    </div>
+                    <div class="layer-info">
+                        <span class="layer-name">Layer ${layerIndex}</span>
+                        <span class="layer-stats">${stats.percentage}% • ${this.formatNumber(stats.pixel_count)} px</span>
+                        <div style="width: 20px; height: 20px; background: rgb(${color.join(',')}); border-radius: 4px; margin: 0.25rem auto; border: 1px solid #ddd;"></div>
+                    </div>
+                    <button class="remove-from-group-btn" title="Remove from group">↗</button>
+                `;
+
+                const checkbox = layerItem.querySelector('.layer-checkbox');
+                const removeBtn = layerItem.querySelector('.remove-from-group-btn');
+
+                checkbox.addEventListener('change', (e) => {
+                    this.handleLayerSelection(e, layerIndex);
+                });
+
+                removeBtn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    // Remove this layer from the group and create its own group
+                    const newGroups = [];
+                    this.layerGrouping.groups.forEach((g, idx) => {
+                        if (idx === groupIndex) {
+                            // Split this group
+                            const remaining = g.filter(i => i !== layerIndex);
+                            if (remaining.length > 0) {
+                                newGroups.push(remaining);
+                            }
+                            // Add the removed layer as its own group
+                            newGroups.push([layerIndex]);
+                        } else {
+                            newGroups.push(g);
+                        }
+                    });
+                    this.layerGrouping.groups = newGroups;
+                    this.renderLayerGroups();
+                });
+
+                layerItem.addEventListener('click', (e) => {
+                    if (e.target.type !== 'checkbox' && !e.target.classList.contains('remove-from-group-btn')) {
+                        checkbox.checked = !checkbox.checked;
+                        this.handleLayerSelection({ target: checkbox }, layerIndex);
+                    }
+                });
+
+                this.layerGrouping.setupDragAndDrop(layerItem, 'layer', layerIndex);
+                contents.appendChild(layerItem);
+            });
+
+            groupItem.appendChild(contents);
+        }
     }
 
     displayStatistics(statistics) {
@@ -342,17 +651,26 @@ class IconDecomposer {
         const exportMode = document.querySelector('input[name="export-mode"]:checked').value;
         const baseName = this.baseName.value || 'icon';
 
-        // Get only selected layers
-        const selectedLayers = [];
-        const selectedStats = [];
-        const sortedIndices = Array.from(this.selectedLayerIndices).sort((a, b) => a - b);
-        sortedIndices.forEach(index => {
-            if (this.currentLayers[index]) {
-                selectedLayers.push(this.currentLayers[index]);
-                // Get pixel count for this layer
-                const stats = this.layerStatistics[index];
-                selectedStats.push(stats ? stats.pixel_count : 0);
-            }
+        // Get selected layers organized by groups
+        const exportLayers = [];
+        const exportStats = [];
+
+        // Process each group - only export if group is checked
+        this.layerGrouping.groups.forEach((group, groupIdx) => {
+            // Skip unchecked groups
+            if (!this.selectedGroupIndices.has(groupIdx)) return;
+
+            // Get checked layers within this checked group
+            const selectedInGroup = group.filter(idx => this.selectedLayerIndices.has(idx));
+
+            if (selectedInGroup.length === 0) return;
+
+            // Export the selected layers
+            selectedInGroup.forEach(idx => {
+                exportLayers.push(this.currentLayers[idx]);
+                const stats = this.layerStatistics[idx];
+                exportStats.push(stats ? stats.pixel_count : 0);
+            });
         });
 
         try {
@@ -366,9 +684,9 @@ class IconDecomposer {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        layers: selectedLayers,
+                        layers: exportLayers,
                         base_name: baseName,
-                        layer_stats: selectedStats
+                        layer_stats: exportStats
                     })
                 });
             } else {
@@ -379,7 +697,7 @@ class IconDecomposer {
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify({
-                        layers: selectedLayers,
+                        layers: exportLayers,
                         mode: exportMode,
                         base_name: baseName
                     })
@@ -467,18 +785,129 @@ class IconDecomposer {
 
     handleLayerSelection(event, index) {
         const checkbox = event.target;
-        const layerItem = this.layersGrid.querySelector(`[data-index="${index}"]`);
 
         if (checkbox.checked) {
             this.selectedLayerIndices.add(index);
-            layerItem.classList.add('selected');
         } else {
             this.selectedLayerIndices.delete(index);
-            layerItem.classList.remove('selected');
+        }
+
+        // Find which group this layer belongs to
+        let targetGroupIndex = -1;
+        this.layerGrouping.groups.forEach((group, groupIdx) => {
+            if (group.includes(index)) {
+                targetGroupIndex = groupIdx;
+            }
+        });
+
+        if (targetGroupIndex >= 0) {
+            this.updateGroupPreview(targetGroupIndex);
+
+            // Update visual state of the individual layer item
+            const layerItem = document.querySelector(`.layer-item[data-layer-index="${index}"]`);
+            if (layerItem) {
+                if (checkbox.checked) {
+                    layerItem.classList.add('selected');
+                } else {
+                    layerItem.classList.remove('selected');
+                }
+            }
         }
 
         // Update export preview
         this.updateExportPreview();
+    }
+
+    updateGroupPreview(groupIndex) {
+        const groupElement = document.querySelector(`.layer-group[data-group-index="${groupIndex}"]`);
+        if (!groupElement) return;
+
+        const group = this.layerGrouping.groups[groupIndex];
+        const isGroupSelected = this.selectedGroupIndices.has(groupIndex);
+        const selectedInGroup = group.filter(idx => this.selectedLayerIndices.has(idx));
+
+        // Calculate what to show in preview - show nothing if no layers selected
+        const isBright = isGroupSelected && selectedInGroup.length > 0;
+
+        // Update the preview image synchronously first
+        const previewImg = groupElement.querySelector('.layer-preview img');
+        if (previewImg) {
+            if (selectedInGroup.length === 0) {
+                // Show empty preview (just checkerboard) when no layers selected
+                const canvas = document.createElement('canvas');
+                canvas.width = 256;
+                canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+
+                // Draw checkerboard
+                ctx.fillStyle = '#f0f0f0';
+                ctx.fillRect(0, 0, 256, 256);
+                ctx.fillStyle = '#fafafa';
+                for (let x = 0; x < 256; x += 20) {
+                    for (let y = 0; y < 256; y += 20) {
+                        if ((x / 20 + y / 20) % 2 === 0) {
+                            ctx.fillRect(x, y, 20, 20);
+                        }
+                    }
+                }
+
+                // Add dimming since nothing is selected
+                ctx.globalAlpha = 0.3;
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.fillRect(0, 0, 256, 256);
+
+                previewImg.src = canvas.toDataURL('image/png');
+            } else {
+                // Show selected layers
+                const immediatePreview = this.layerGrouping.createMergedPreview(selectedInGroup, isBright);
+                previewImg.src = immediatePreview;
+            }
+        }
+
+        // Update stats
+        let totalPixels = 0;
+        let totalPercentage = 0;
+        let avgColor = [0, 0, 0];
+        let colorWeightSum = 0;
+
+        group.forEach(idx => {
+            if (this.selectedLayerIndices.has(idx)) {
+                const stats = this.layerStatistics[idx] || {};
+                const pixelCount = stats.pixel_count || 0;
+                totalPixels += pixelCount;
+                totalPercentage += stats.percentage || 0;
+
+                if (stats.average_color_rgb) {
+                    avgColor[0] += stats.average_color_rgb[0] * pixelCount;
+                    avgColor[1] += stats.average_color_rgb[1] * pixelCount;
+                    avgColor[2] += stats.average_color_rgb[2] * pixelCount;
+                    colorWeightSum += pixelCount;
+                }
+            }
+        });
+
+        if (colorWeightSum > 0) {
+            avgColor[0] = Math.round(avgColor[0] / colorWeightSum);
+            avgColor[1] = Math.round(avgColor[1] / colorWeightSum);
+            avgColor[2] = Math.round(avgColor[2] / colorWeightSum);
+        }
+
+        // Update stats display
+        const statsElement = groupElement.querySelector('.layer-stats');
+        if (statsElement) {
+            statsElement.textContent = `${totalPercentage.toFixed(2)}% • ${this.formatNumber(totalPixels)} px`;
+        }
+
+        // Update color square
+        const colorSquare = groupElement.querySelector('.color-square');
+        if (colorSquare) {
+            if (colorWeightSum > 0) {
+                colorSquare.style.backgroundColor = `rgb(${avgColor[0]}, ${avgColor[1]}, ${avgColor[2]})`;
+                colorSquare.style.visibility = 'visible';
+            } else {
+                colorSquare.style.visibility = 'hidden';
+            }
+        }
     }
 
     async updateExportPreview() {
@@ -491,12 +920,81 @@ class IconDecomposer {
         await this.updateReconstruction();
     }
 
+    // Generate merged preview for export section
+    generateExportPreview(layerIndices, imgId) {
+        if (!layerIndices || layerIndices.length === 0) return;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+
+        // Draw checkerboard
+        ctx.fillStyle = '#f0f0f0';
+        ctx.fillRect(0, 0, 256, 256);
+        ctx.fillStyle = '#fafafa';
+        for (let x = 0; x < 256; x += 20) {
+            for (let y = 0; y < 256; y += 20) {
+                if ((x / 20 + y / 20) % 2 === 0) {
+                    ctx.fillRect(x, y, 20, 20);
+                }
+            }
+        }
+
+        // Load and composite all layers
+        const loadPromises = layerIndices.map(idx => {
+            return new Promise((resolve) => {
+                if (this.currentLayers[idx]) {
+                    const img = new Image();
+                    img.onload = () => resolve(img);
+                    img.onerror = () => resolve(null);
+                    img.src = 'data:image/png;base64,' + this.currentLayers[idx];
+                } else {
+                    resolve(null);
+                }
+            });
+        });
+
+        Promise.all(loadPromises).then(images => {
+            // Clear and redraw with layers
+            ctx.clearRect(0, 0, 256, 256);
+
+            // Redraw checkerboard
+            ctx.fillStyle = '#f0f0f0';
+            ctx.fillRect(0, 0, 256, 256);
+            ctx.fillStyle = '#fafafa';
+            for (let x = 0; x < 256; x += 20) {
+                for (let y = 0; y < 256; y += 20) {
+                    if ((x / 20 + y / 20) % 2 === 0) {
+                        ctx.fillRect(x, y, 20, 20);
+                    }
+                }
+            }
+
+            // Draw each layer
+            images.forEach(img => {
+                if (img) {
+                    ctx.drawImage(img, 0, 0, 256, 256);
+                }
+            });
+
+            // Update the specific image element
+            const imgElement = document.getElementById(imgId);
+            if (imgElement) {
+                imgElement.src = canvas.toDataURL('image/png');
+            }
+        });
+    }
+
     displaySelectedLayers() {
         if (!this.selectedLayers) return;
 
         this.selectedLayers.innerHTML = '';
 
-        if (this.selectedLayerIndices.size === 0) {
+        // Check if any groups are selected
+        const hasSelection = this.selectedGroupIndices.size > 0 && this.selectedLayerIndices.size > 0;
+
+        if (!hasSelection) {
             this.selectedLayers.innerHTML = '<p style="color: #718096; text-align: center;">No layers selected for export</p>';
             return;
         }
@@ -504,19 +1002,59 @@ class IconDecomposer {
         const selectedContainer = document.createElement('div');
         selectedContainer.className = 'selected-layers-grid';
 
-        // Sort indices to maintain order
-        const sortedIndices = Array.from(this.selectedLayerIndices).sort((a, b) => a - b);
+        // Display only checked groups with their checked layers
+        this.layerGrouping.groups.forEach((group, groupIdx) => {
+            // Skip unchecked groups
+            if (!this.selectedGroupIndices.has(groupIdx)) return;
 
-        sortedIndices.forEach(index => {
-            const layerData = this.currentLayers[index];
-            const stats = this.currentStatistics.layer_sizes[index] || {};
+            const selectedInGroup = group.filter(idx => this.selectedLayerIndices.has(idx));
+            if (selectedInGroup.length === 0) return;
 
             const item = document.createElement('div');
             item.className = 'selected-layer-item';
-            item.innerHTML = `
-                <img src="data:image/png;base64,${layerData}" alt="Layer ${index}">
-                <p>Layer ${index}</p>
-            `;
+
+            // Determine the name
+            const groupName = selectedInGroup.length === 1
+                ? `Layer ${selectedInGroup[0]}`
+                : `L ${selectedInGroup.join('+')}`;
+
+            // Create preview with the selected layers
+            if (selectedInGroup.length === 1 && this.currentLayers[selectedInGroup[0]]) {
+                // For single layer, use the layer data directly
+                const previewSrc = 'data:image/png;base64,' + this.currentLayers[selectedInGroup[0]];
+                item.innerHTML = `
+                    <img src="${previewSrc}" alt="${groupName}">
+                    <p>${groupName}</p>
+                `;
+            } else {
+                // For groups, create a placeholder and update it async
+                const imgId = `export-preview-${groupIdx}-${Date.now()}`;
+
+                // Create initial checkerboard preview
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = 256;
+                tempCanvas.height = 256;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.fillStyle = '#f0f0f0';
+                tempCtx.fillRect(0, 0, 256, 256);
+                tempCtx.fillStyle = '#fafafa';
+                for (let x = 0; x < 256; x += 20) {
+                    for (let y = 0; y < 256; y += 20) {
+                        if ((x / 20 + y / 20) % 2 === 0) {
+                            tempCtx.fillRect(x, y, 20, 20);
+                        }
+                    }
+                }
+
+                item.innerHTML = `
+                    <img id="${imgId}" src="${tempCanvas.toDataURL('image/png')}" alt="${groupName}">
+                    <p>${groupName}</p>
+                `;
+
+                // Generate the merged preview and update when ready
+                this.generateExportPreview(selectedInGroup, imgId);
+            }
+
             selectedContainer.appendChild(item);
         });
 
@@ -549,8 +1087,16 @@ class IconDecomposer {
         arrow.innerHTML = '→';
         previewContainer.appendChild(arrow);
 
-        // Create reconstruction from selected layers
-        if (this.selectedLayerIndices.size > 0) {
+        // Create reconstruction from selected layers (only from checked groups)
+        const layersToReconstruct = [];
+        this.layerGrouping.groups.forEach((group, groupIdx) => {
+            if (this.selectedGroupIndices.has(groupIdx)) {
+                const selectedInGroup = group.filter(idx => this.selectedLayerIndices.has(idx));
+                layersToReconstruct.push(...selectedInGroup);
+            }
+        });
+
+        if (layersToReconstruct.length > 0) {
             // Request reconstruction from backend
             try {
                 const response = await fetch('/reconstruct', {
@@ -560,7 +1106,7 @@ class IconDecomposer {
                     },
                     body: JSON.stringify({
                         layers: this.currentLayers,
-                        selected: Array.from(this.selectedLayerIndices)
+                        selected: layersToReconstruct
                     })
                 });
 
@@ -570,8 +1116,8 @@ class IconDecomposer {
                         const reconstructionItem = document.createElement('div');
                         reconstructionItem.className = 'preview-item';
                         reconstructionItem.innerHTML = `
-                            <img src="data:image/png;base64,${data.reconstruction}" alt="Reconstruction">
-                            <p>Reconstruction (${this.selectedLayerIndices.size} layers)</p>
+                            <img src="data:image/png;base64,${data.reconstruction}" alt="Result">
+                            <p>Result</p>
                         `;
                         previewContainer.appendChild(reconstructionItem);
                     }
@@ -580,8 +1126,8 @@ class IconDecomposer {
                     const reconstructionItem = document.createElement('div');
                     reconstructionItem.className = 'preview-item';
                     reconstructionItem.innerHTML = `
-                        <img src="data:image/png;base64,${this.currentVisualizations.reconstruction}" alt="Reconstruction">
-                        <p>Reconstruction (${this.selectedLayerIndices.size} layers)</p>
+                        <img src="data:image/png;base64,${this.currentVisualizations.reconstruction}" alt="Result">
+                        <p>Result</p>
                     `;
                     previewContainer.appendChild(reconstructionItem);
                 }

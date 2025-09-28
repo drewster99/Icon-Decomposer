@@ -6,6 +6,7 @@ import io
 import base64
 import json
 import shutil
+import hashlib
 from PIL import Image
 import numpy as np
 from processor import IconProcessor
@@ -91,6 +92,13 @@ def process_image():
             'visualize_steps': request.form.get('visualize_steps', 'true') == 'true'
         }
 
+        # Read file content to generate hash
+        file_content = file.read()
+        file.seek(0)  # Reset file pointer for saving
+
+        # Generate content hash for cache key
+        content_hash = hashlib.sha256(file_content).hexdigest()[:16]
+
         # Save uploaded file with UUID to prevent conflicts
         original_filename = secure_filename(file.filename)
         file_ext = os.path.splitext(original_filename)[1]
@@ -102,7 +110,8 @@ def process_image():
         print("=" * 60)
         print(f"Original filename: {file.filename}")
         print(f"Saved as: {unique_filename}")
-        print(f"File size: {file.content_length if file.content_length else 'unknown'} bytes")
+        print(f"Content hash: {content_hash}")
+        print(f"File size: {len(file_content):,} bytes")
         print("\nParameters:")
         for key, value in params.items():
             print(f"  {key}: {value}")
@@ -112,8 +121,9 @@ def process_image():
         file.save(filepath)
         print(f"File save time: {(time.time() - save_time):.3f}s")
 
-        # Process the image
+        # Process the image - pass content hash as cache key
         process_start = time.time()
+        params['cache_key'] = content_hash  # Use content hash as cache key
         result = processor.process_image(filepath, params)
         print(f"Total processing time: {(time.time() - process_start):.3f}s")
 

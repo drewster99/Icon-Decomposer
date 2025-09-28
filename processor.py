@@ -15,6 +15,15 @@ class IconProcessor:
         self.clusters = None
         self.layers = None
 
+        # Cache for avoiding redundant computation
+        self.cache = {
+            'image_path': None,
+            'superpixels': None,
+            'superpixel_colors': None,
+            'n_segments': None,
+            'compactness': None
+        }
+
     def process_image(self, image_path, params):
         """Main processing pipeline"""
         import time
@@ -50,23 +59,47 @@ class IconProcessor:
             'visualizations': {}
         }
 
-        # Step 1: SLIC Superpixel Segmentation
-        slic_start = time.time()
-        self.superpixels = self._perform_slic(
-            self.original_image,
-            n_segments=params['n_segments'],
-            compactness=params['compactness']
+        # Check if we can reuse cached superpixels
+        cache_key = params.get('cache_key', image_path)  # Use cache_key if provided
+        can_reuse_superpixels = (
+            self.cache.get('image_path') == cache_key and
+            self.cache['n_segments'] == params['n_segments'] and
+            self.cache['compactness'] == params['compactness'] and
+            self.cache['superpixels'] is not None and
+            self.cache['superpixel_colors'] is not None
         )
-        print(f"SLIC segmentation: {(time.time() - slic_start):.3f}s")
-        print(f"  Unique superpixels: {self.superpixels.max() + 1}")
 
-        # Step 2: Extract superpixel features
-        extract_start = time.time()
-        superpixel_colors = self._extract_superpixel_colors(
-            self.original_image,
-            self.superpixels
-        )
-        print(f"Feature extraction: {(time.time() - extract_start):.3f}s")
+        if can_reuse_superpixels:
+            # Reuse cached superpixels and colors
+            print("Reusing cached superpixels and features")
+            self.superpixels = self.cache['superpixels']
+            superpixel_colors = self.cache['superpixel_colors']
+            print(f"  Unique superpixels: {self.superpixels.max() + 1} (cached)")
+        else:
+            # Step 1: SLIC Superpixel Segmentation
+            slic_start = time.time()
+            self.superpixels = self._perform_slic(
+                self.original_image,
+                n_segments=params['n_segments'],
+                compactness=params['compactness']
+            )
+            print(f"SLIC segmentation: {(time.time() - slic_start):.3f}s")
+            print(f"  Unique superpixels: {self.superpixels.max() + 1}")
+
+            # Step 2: Extract superpixel features
+            extract_start = time.time()
+            superpixel_colors = self._extract_superpixel_colors(
+                self.original_image,
+                self.superpixels
+            )
+            print(f"Feature extraction: {(time.time() - extract_start):.3f}s")
+
+            # Update cache
+            self.cache['image_path'] = cache_key
+            self.cache['n_segments'] = params['n_segments']
+            self.cache['compactness'] = params['compactness']
+            self.cache['superpixels'] = self.superpixels
+            self.cache['superpixel_colors'] = superpixel_colors
 
         # Step 3: K-means clustering in LAB space
         kmeans_start = time.time()
@@ -110,7 +143,8 @@ class IconProcessor:
                 self.superpixels,
                 superpixel_colors,
                 cluster_labels,
-                pixel_clusters
+                pixel_clusters,
+                reuse_static=can_reuse_superpixels  # Reuse static visualizations if superpixels were cached
             )
             print(f"Visualization generation: {(time.time() - viz_start):.3f}s")
 
@@ -311,8 +345,12 @@ class IconProcessor:
         return layers
 
     def _generate_visualizations(self, image, superpixels, superpixel_colors,
-                                 cluster_labels, pixel_clusters):
-        """Generate visualization images for each processing step"""
+                                 cluster_labels, pixel_clusters, reuse_static=False):
+        """Generate visualization images for each processing step
+
+        Args:
+            reuse_static: If True, only regenerate cluster-dependent visualizations
+        """
         visualizations = {}
 
         # Downsample everything to 256x256 for faster visualization generation
@@ -330,21 +368,34 @@ class IconProcessor:
         pixel_clusters_pil = PILImage.fromarray(pixel_clusters.astype(np.int32))
         pixel_clusters_small = np.array(pixel_clusters_pil.resize((256, 256), PILImage.Resampling.NEAREST))
 
-        # 1. Original image (already 256x256)
-        visualizations['original'] = image_small
+        # Only generate static visualizations if not reusing
+        if not reuse_static:
+            # 1. Original image (already 256x256)
+            visualizations['original'] = image_small
 
-        # 2. Superpixel boundaries (on 256x256)
-        boundaries = segmentation.mark_boundaries(image_small, superpixels_small, color=(1, 0, 0))
-        visualizations['superpixels'] = (boundaries * 255).astype(np.uint8)
+            # 2. Superpixel boundaries (on 256x256)
+            boundaries = segmentation.mark_boundaries(image_small, superpixels_small, color=(1, 0, 0))
+            visualizations['superpixels'] = (boundaries * 255).astype(np.uint8)
 
-        # 3. Superpixel average colors (on 256x256)
-        avg_image = np.zeros_like(image_small, dtype=np.float64)
-        lab_to_rgb_colors = color.lab2rgb(superpixel_colors.reshape(1, -1, 3)).reshape(-1, 3)
-        for i in range(superpixels.max() + 1):
-            mask = superpixels_small == i
-            if mask.any():
-                avg_image[mask] = lab_to_rgb_colors[i] * 255
-        visualizations['superpixel_colors'] = avg_image.astype(np.uint8)
+            # 3. Superpixel average colors (on 256x256)
+            avg_image = np.zeros_like(image_small, dtype=np.float64)
+            lab_to_rgb_colors = color.lab2rgb(superpixel_colors.reshape(1, -1, 3)).reshape(-1, 3)
+            for i in range(superpixels.max() + 1):
+                mask = superpixels_small == i
+                if mask.any():
+                    avg_image[mask] = lab_to_rgb_colors[i] * 255
+            visualizations['superpixel_colors'] = avg_image.astype(np.uint8)
+
+            # Cache these static visualizations
+            self.cache['static_visualizations'] = {
+                'original': visualizations['original'],
+                'superpixels': visualizations['superpixels'],
+                'superpixel_colors': visualizations['superpixel_colors']
+            }
+        else:
+            # Reuse cached static visualizations
+            if 'static_visualizations' in self.cache:
+                visualizations.update(self.cache['static_visualizations'])
 
         # 4. Clustered result (on 256x256)
         clustered_image = np.zeros_like(image_small, dtype=np.float64)

@@ -47,9 +47,23 @@
    - Cache preview images in browser
 
 ### Performance Summary
-- **Original**: 4.6-7.3 seconds total
-- **Current**: 1.3-1.6 seconds initial, 0.87 seconds when changing only layers
-- **Overall improvement**: 3-4x faster initial, 5-8x faster for iterations
+- **Very Original** (before any optimizations): 7.3 seconds total
+  - Feature extraction: 2.6s
+  - Visualization generation: 2.7s
+  - Response encoding: 1.0-1.2s
+  - SLIC segmentation: 0.45s
+  - Reconstruction: 450ms
+
+- **Current** (after all optimizations):
+  - Initial processing: 1.3-1.6 seconds
+  - Changing only layers: 0.87 seconds
+  - Feature extraction: 0.06s (42x faster)
+  - Visualization generation: 0.22s (12x faster)
+  - Response encoding: 0.4-0.6s (2x faster)
+  - SLIC segmentation: 0.45s (unchanged, but cached when reusable)
+  - Reconstruction: 25-70ms (7x faster)
+
+- **Overall improvement**: 4.5-5.6x faster initial, 8.4x faster for iterations
 
 ## Feature Enhancements (from PROJECT_NOTES.md)
 

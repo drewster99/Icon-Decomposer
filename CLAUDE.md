@@ -69,6 +69,34 @@ python server.py
 - Pillow for image I/O
 - NumPy for array operations
 
+## Performance Optimizations Completed
+
+### Original Performance (before optimizations)
+- Total request time: **7.3 seconds**
+- Feature extraction: 2.6s (looping through 1,465 superpixels)
+- Visualization generation: 2.7s (full 1024×1024 resolution)
+- Response encoding: 1.0-1.2s (base64 encoding all images)
+- SLIC segmentation: 0.45s
+- Reconstruction: 450ms (full resolution)
+
+### Current Performance (after optimizations)
+- **Initial request**: **1.3-1.6 seconds** (4.5-5.6x faster)
+- **Changing only layers**: **0.87 seconds** (8.4x faster)
+
+#### Specific Improvements:
+1. **Feature extraction**: 2.6s → 0.06s (42x faster using scipy.ndimage.mean)
+2. **Visualization generation**: 2.7s → 0.22s (12x faster at 256px resolution)
+3. **Response encoding**: 1.0s → 0.4-0.6s (2x faster with preview/full split)
+4. **Reconstruction**: 450ms → 25-70ms (7x faster at 256px)
+5. **Caching**: Skips SLIC (0.45s) and features (0.06s) when only n_layers changes
+
+### Optimization Techniques Applied:
+- Vectorized operations replacing Python loops
+- 256×256 preview generation for display (full-res kept for export)
+- Content-based caching using SHA-256 hash
+- Selective visualization regeneration
+- Smart layer group management in UI
+
 ## Testing Approach
 
 No formal test suite currently exists. Testing is done manually by:

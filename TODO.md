@@ -22,12 +22,34 @@
 ### Completed
 1. **Feature Extraction Optimization**: ✅ Vectorized using scipy.ndimage.mean - reduced from 2.6s to 0.06s (42x speedup)
 2. **Generate 256px Previews**: ✅ All visualizations and layer previews now rendered at 256px with full-res maintained for exports
+3. **Visualization Generation at 256px**: ✅ Generate visualizations directly at 256px - reduced from 2.7s to 0.22s (12x speedup)
+4. **Smart Caching for Superpixels**: ✅ Cache superpixels when only n_layers changes - 5x faster processing (1.2s → 0.25s)
 
 ### Pending
-1. **Replace Base64 Encoding with File-Based Serving**: Eliminate 1.0s encoding overhead by serving PNG files directly
-2. **Remove Hardcoded 1024x1024 Assumptions**: Support arbitrary image dimensions without distortion
-3. **Implement Dependency-Aware Caching**: Only regenerate affected stages when parameters change
-4. **Add Client-Side Intelligence**: Track parameters client-side to minimize server requests
+1. **Replace Base64 Encoding with File-Based Serving**:
+   - Eliminate 0.4-0.6s encoding overhead by serving PNG files directly
+   - Use content-based filenames for browser caching
+   - Implement cleanup strategy for old files
+
+2. **Remove Hardcoded 1024x1024 Assumptions**:
+   - Support arbitrary image dimensions without distortion
+   - Fix statistics calculation to use actual dimensions
+   - Make reconstruction buffer dynamic
+
+3. **Implement Full Dependency-Aware Caching**:
+   - Cache at each pipeline stage (superpixels, clustering, layers)
+   - Track parameter dependencies (e.g., edge_mode only affects layers)
+   - Add memory management for cached data
+
+4. **Add Client-Side Intelligence**:
+   - Track last parameters to send only changes
+   - Implement "regenerate_from" hints
+   - Cache preview images in browser
+
+### Performance Summary
+- **Original**: 4.6-7.3 seconds total
+- **Current**: 1.3-1.6 seconds initial, 0.87 seconds when changing only layers
+- **Overall improvement**: 3-4x faster initial, 5-8x faster for iterations
 
 ## Feature Enhancements (from PROJECT_NOTES.md)
 

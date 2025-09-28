@@ -33,20 +33,36 @@ def allowed_file(filename):
 
 @app.route('/')
 def index():
+    import time
+    start_time = time.time()
     with open(os.path.join(STATIC_FOLDER, 'index.html'), 'r') as f:
-        return f.read()
+        content = f.read()
+    print(f"[GET /] Time: {(time.time() - start_time)*1000:.2f}ms")
+    return content
 
 @app.route('/style.css')
 def serve_css():
-    return send_from_directory(STATIC_FOLDER, 'style.css')
+    import time
+    start_time = time.time()
+    response = send_from_directory(STATIC_FOLDER, 'style.css')
+    print(f"[GET /style.css] Time: {(time.time() - start_time)*1000:.2f}ms")
+    return response
 
 @app.route('/app.js')
 def serve_js():
-    return send_from_directory(STATIC_FOLDER, 'app.js')
+    import time
+    start_time = time.time()
+    response = send_from_directory(STATIC_FOLDER, 'app.js')
+    print(f"[GET /app.js] Time: {(time.time() - start_time)*1000:.2f}ms")
+    return response
 
 @app.route('/layer-grouping.js')
 def serve_layer_grouping():
-    return send_from_directory(STATIC_FOLDER, 'layer-grouping.js')
+    import time
+    start_time = time.time()
+    response = send_from_directory(STATIC_FOLDER, 'layer-grouping.js')
+    print(f"[GET /layer-grouping.js] Time: {(time.time() - start_time)*1000:.2f}ms")
+    return response
 
 @app.route('/process', methods=['POST'])
 def process_image():
@@ -147,11 +163,19 @@ def process_image():
 
 @app.route('/export', methods=['POST'])
 def export_layers():
+    import time
+    start_time = time.time()
+
     try:
         data = request.json
         layers_data = data.get('layers', [])
         export_mode = data.get('mode', 'folder')  # 'folder' or 'suffix'
         base_name = data.get('base_name', 'icon')
+
+        print(f"\n[POST /export] Starting export")
+        print(f"  Mode: {export_mode}")
+        print(f"  Base name: {base_name}")
+        print(f"  Number of layers: {len(layers_data)}")
 
         export_id = f"{base_name}_{os.urandom(4).hex()}"
 
@@ -172,6 +196,7 @@ def export_layers():
             # Clean up folder
             shutil.rmtree(export_path)
 
+            print(f"[POST /export] Export completed in {(time.time() - start_time)*1000:.2f}ms")
             return send_file(os.path.join(app.config['EXPORT_FOLDER'], f"{export_id}.zip"),
                            as_attachment=True,
                            download_name=f"{base_name}_layers.zip")
@@ -194,21 +219,29 @@ def export_layers():
             # Clean up folder
             shutil.rmtree(export_path)
 
+            print(f"[POST /export] Export completed in {(time.time() - start_time)*1000:.2f}ms")
             return send_file(os.path.join(app.config['EXPORT_FOLDER'], f"{export_id}.zip"),
                            as_attachment=True,
                            download_name=f"{base_name}_layers.zip")
 
     except Exception as e:
-        print(f"Error exporting layers: {str(e)}")
+        print(f"[POST /export] Error after {(time.time() - start_time)*1000:.2f}ms: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/reconstruct', methods=['POST'])
 def reconstruct_layers():
     """Generate reconstruction from selected layers"""
+    import time
+    start_time = time.time()
+
     try:
         data = request.json
         layers_data = data.get('layers', [])
         selected_indices = data.get('selected', [])
+
+        print(f"\n[POST /reconstruct] Starting reconstruction")
+        print(f"  Total layers: {len(layers_data)}")
+        print(f"  Selected layers: {selected_indices}")
 
         if not layers_data or not selected_indices:
             return jsonify({'reconstruction': None})
@@ -246,20 +279,28 @@ def reconstruct_layers():
         img.save(buffer, format='PNG')
         reconstruction_b64 = base64.b64encode(buffer.getvalue()).decode('utf-8')
 
+        print(f"[POST /reconstruct] Reconstruction completed in {(time.time() - start_time)*1000:.2f}ms")
         return jsonify({'reconstruction': reconstruction_b64})
 
     except Exception as e:
-        print(f"Error creating reconstruction: {str(e)}")
+        print(f"[POST /reconstruct] Error after {(time.time() - start_time)*1000:.2f}ms: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/export-icon-bundle', methods=['POST'])
 def export_icon_bundle():
     """Export layers as an Apple Icon Composer bundle (.icon)"""
+    import time
+    start_time = time.time()
+
     try:
         data = request.json
         layers_data = data.get('layers', [])
         base_name = data.get('base_name', 'icon')
         layer_stats = data.get('layer_stats', [])  # Contains pixel counts for ordering
+
+        print(f"\n[POST /export-icon-bundle] Starting Apple icon bundle export")
+        print(f"  Base name: {base_name}")
+        print(f"  Number of layers: {len(layers_data)}")
 
         if not layers_data:
             return jsonify({'error': 'No layers to export'}), 400
@@ -341,28 +382,36 @@ def export_icon_bundle():
         # Clean up temporary directory
         shutil.rmtree(os.path.join(app.config['EXPORT_FOLDER'], export_id))
 
+        print(f"[POST /export-icon-bundle] Bundle export completed in {(time.time() - start_time)*1000:.2f}ms")
         return send_file(f"{zip_path}.zip",
                         as_attachment=True,
                         download_name=f"{base_name}.icon.zip")
 
     except Exception as e:
-        print(f"Error exporting icon bundle: {str(e)}")
+        print(f"[POST /export-icon-bundle] Error after {(time.time() - start_time)*1000:.2f}ms: {str(e)}")
         import traceback
         print(traceback.format_exc())
         return jsonify({'error': str(e)}), 500
 
 @app.route('/cleanup', methods=['POST'])
 def cleanup_exports():
+    import time
+    start_time = time.time()
+
     try:
         # Clean up old export files (older than 1 hour)
-        import time
         current_time = time.time()
+        files_removed = 0
         for filename in os.listdir(app.config['EXPORT_FOLDER']):
             filepath = os.path.join(app.config['EXPORT_FOLDER'], filename)
             if os.path.getmtime(filepath) < current_time - 3600:  # 1 hour
                 os.remove(filepath)
-        return jsonify({'status': 'cleaned'})
+                files_removed += 1
+
+        print(f"[POST /cleanup] Removed {files_removed} old files in {(time.time() - start_time)*1000:.2f}ms")
+        return jsonify({'status': 'cleaned', 'files_removed': files_removed})
     except Exception as e:
+        print(f"[POST /cleanup] Error after {(time.time() - start_time)*1000:.2f}ms: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 if __name__ == '__main__':

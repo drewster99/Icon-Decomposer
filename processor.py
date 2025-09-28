@@ -315,36 +315,58 @@ class IconProcessor:
         """Generate visualization images for each processing step"""
         visualizations = {}
 
-        # 1. Original image
-        visualizations['original'] = image
+        # Downsample everything to 256x256 for faster visualization generation
+        from PIL import Image as PILImage
 
-        # 2. Superpixel boundaries
-        boundaries = segmentation.mark_boundaries(image, superpixels, color=(1, 0, 0))
+        # Resize the main image
+        img_pil = PILImage.fromarray(image.astype(np.uint8))
+        img_small_pil = img_pil.resize((256, 256), PILImage.Resampling.LANCZOS)
+        image_small = np.array(img_small_pil)
+
+        # Resize the superpixels and pixel_clusters using nearest neighbor to preserve labels
+        superpixels_pil = PILImage.fromarray(superpixels.astype(np.int32))
+        superpixels_small = np.array(superpixels_pil.resize((256, 256), PILImage.Resampling.NEAREST))
+
+        pixel_clusters_pil = PILImage.fromarray(pixel_clusters.astype(np.int32))
+        pixel_clusters_small = np.array(pixel_clusters_pil.resize((256, 256), PILImage.Resampling.NEAREST))
+
+        # 1. Original image (already 256x256)
+        visualizations['original'] = image_small
+
+        # 2. Superpixel boundaries (on 256x256)
+        boundaries = segmentation.mark_boundaries(image_small, superpixels_small, color=(1, 0, 0))
         visualizations['superpixels'] = (boundaries * 255).astype(np.uint8)
 
-        # 3. Superpixel average colors
-        avg_image = np.zeros_like(image, dtype=np.float64)
+        # 3. Superpixel average colors (on 256x256)
+        avg_image = np.zeros_like(image_small, dtype=np.float64)
         lab_to_rgb_colors = color.lab2rgb(superpixel_colors.reshape(1, -1, 3)).reshape(-1, 3)
         for i in range(superpixels.max() + 1):
-            mask = superpixels == i
-            avg_image[mask] = lab_to_rgb_colors[i] * 255
+            mask = superpixels_small == i
+            if mask.any():
+                avg_image[mask] = lab_to_rgb_colors[i] * 255
         visualizations['superpixel_colors'] = avg_image.astype(np.uint8)
 
-        # 4. Clustered result
-        clustered_image = np.zeros_like(image, dtype=np.float64)
+        # 4. Clustered result (on 256x256)
+        clustered_image = np.zeros_like(image_small, dtype=np.float64)
         if self.clusters is not None:
             cluster_colors_rgb = color.lab2rgb(self.clusters.reshape(1, -1, 3)).reshape(-1, 3)
-            for i in np.unique(pixel_clusters):
-                mask = pixel_clusters == i
+            for i in np.unique(pixel_clusters_small):
+                mask = pixel_clusters_small == i
                 if i < len(cluster_colors_rgb):
                     clustered_image[mask] = cluster_colors_rgb[i] * 255
         visualizations['clustered'] = clustered_image.astype(np.uint8)
 
-        # 5. Reconstruction preview (stack all layers)
-        reconstruction = np.zeros((image.shape[0], image.shape[1], 3), dtype=np.float32)
+        # 5. Reconstruction preview (resize layers to 256x256 first)
+        reconstruction = np.zeros((256, 256, 3), dtype=np.float32)
         for layer in self.layers:
-            alpha = layer[:, :, 3:4]
-            reconstruction += layer[:, :, :3] * alpha
+            # Resize each layer to 256x256
+            layer_uint8 = (layer * 255).astype(np.uint8)
+            layer_pil = PILImage.fromarray(layer_uint8, 'RGBA')
+            layer_small_pil = layer_pil.resize((256, 256), PILImage.Resampling.LANCZOS)
+            layer_small = np.array(layer_small_pil).astype(np.float32) / 255.0
+
+            alpha = layer_small[:, :, 3:4]
+            reconstruction += layer_small[:, :, :3] * alpha
         reconstruction = np.clip(reconstruction * 255, 0, 255).astype(np.uint8)
         visualizations['reconstruction'] = reconstruction
 

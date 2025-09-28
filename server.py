@@ -123,11 +123,26 @@ def process_image():
         # Convert numpy arrays to base64 for transmission
         encoding_start = time.time()
         if 'layers' in result:
+            layers_preview = []
+            layers_full = []
+
             for i, layer in enumerate(result['layers']):
+                # Convert to image
                 img = Image.fromarray((layer * 255).astype(np.uint8), 'RGBA')
+
+                # Full resolution for exports
                 buffer = io.BytesIO()
                 img.save(buffer, format='PNG')
-                result['layers'][i] = base64.b64encode(buffer.getvalue()).decode('utf-8')
+                layers_full.append(base64.b64encode(buffer.getvalue()).decode('utf-8'))
+
+                # 256px preview for display
+                img_preview = img.resize((256, 256), Image.Resampling.LANCZOS)
+                buffer = io.BytesIO()
+                img_preview.save(buffer, format='PNG')
+                layers_preview.append(base64.b64encode(buffer.getvalue()).decode('utf-8'))
+
+            result['layers'] = layers_preview
+            result['layers_full'] = layers_full
 
         if 'visualizations' in result:
             for key, viz in result['visualizations'].items():
@@ -146,6 +161,7 @@ def process_image():
                     else:
                         img = Image.fromarray(viz, 'RGBA')
 
+                    # Visualizations are already 256px from processor
                     buffer = io.BytesIO()
                     img.save(buffer, format='PNG')
                     result['visualizations'][key] = base64.b64encode(buffer.getvalue()).decode('utf-8')
@@ -248,15 +264,24 @@ def reconstruct_layers():
 
         # Decode layers
         layers = []
+        layer_size = None
         for idx in selected_indices:
             if idx < len(layers_data):
                 layer_b64 = layers_data[idx]
                 layer_data = base64.b64decode(layer_b64)
                 img = Image.open(io.BytesIO(layer_data))
-                layers.append(np.array(img))
+                layer_array = np.array(img)
+                layers.append(layer_array)
 
-        # Create reconstruction
-        reconstruction = np.zeros((1024, 1024, 4), dtype=np.float32)
+                # Get the size from the first layer
+                if layer_size is None:
+                    layer_size = layer_array.shape[:2]
+
+        # Create reconstruction with the same size as the input layers
+        if layer_size is None:
+            return jsonify({'reconstruction': None})
+
+        reconstruction = np.zeros((layer_size[0], layer_size[1], 4), dtype=np.float32)
         for layer in layers:
             # Convert to float if needed
             if layer.dtype == np.uint8:

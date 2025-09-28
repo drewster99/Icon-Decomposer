@@ -17,6 +17,18 @@
   - Use calc() to precisely control widths
   - Consider using CSS container queries
 
+## Performance Optimizations
+
+### Completed
+1. **Feature Extraction Optimization**: ✅ Vectorized using scipy.ndimage.mean - reduced from 2.6s to 0.06s (42x speedup)
+2. **Generate 256px Previews**: ✅ All visualizations and layer previews now rendered at 256px with full-res maintained for exports
+
+### Pending
+1. **Replace Base64 Encoding with File-Based Serving**: Eliminate 1.0s encoding overhead by serving PNG files directly
+2. **Remove Hardcoded 1024x1024 Assumptions**: Support arbitrary image dimensions without distortion
+3. **Implement Dependency-Aware Caching**: Only regenerate affected stages when parameters change
+4. **Add Client-Side Intelligence**: Track parameters client-side to minimize server requests
+
 ## Feature Enhancements (from PROJECT_NOTES.md)
 
 ### High Priority

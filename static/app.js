@@ -74,6 +74,7 @@ class IconDecomposer {
         this.selectedLayerIndices = new Set();  // Individual layer selection
         this.selectedGroupIndices = new Set();  // Group-level selection
         this.currentLayers = [];
+        this.currentLayersFull = [];  // Full resolution layers for export
         this.layerStatistics = [];
 
         // Layer grouping state
@@ -245,12 +246,17 @@ class IconDecomposer {
         // Store visualizations for use in layers section
         this.currentVisualizations = data.visualizations;
 
+        // Store full resolution layers for export (if available)
+        if (data.layers_full) {
+            this.currentLayersFull = data.layers_full;
+        }
+
         // Display visualizations
         if (data.visualizations) {
             this.displayVisualizations(data.visualizations);
         }
 
-        // Display layers
+        // Display layers (using preview versions)
         if (data.layers && data.visualizations) {
             this.displayLayers(data.layers, data.statistics, data.visualizations);
         }
@@ -575,28 +581,58 @@ class IconDecomposer {
                 const checkbox = layerItem.querySelector('.layer-checkbox');
                 const removeBtn = layerItem.querySelector('.remove-from-group-btn');
 
+                // Hide remove button if this is the only layer in the group
+                if (group.length <= 1) {
+                    removeBtn.style.display = 'none';
+                }
+
                 checkbox.addEventListener('change', (e) => {
                     this.handleLayerSelection(e, layerIndex);
                 });
 
                 removeBtn.addEventListener('click', (e) => {
                     e.stopPropagation();
+
+                    // Don't allow removing if it's the last layer in the group
+                    if (group.length <= 1) {
+                        return;
+                    }
+
                     // Remove this layer from the group and create its own group
                     const newGroups = [];
+                    const wasExpanded = this.layerGrouping.expandedGroups.has(groupIndex);
+
+                    // Track which new indices correspond to expanded groups
+                    const newExpandedIndices = new Set();
+                    let currentNewIndex = 0;
+
                     this.layerGrouping.groups.forEach((g, idx) => {
                         if (idx === groupIndex) {
                             // Split this group
                             const remaining = g.filter(i => i !== layerIndex);
                             if (remaining.length > 0) {
                                 newGroups.push(remaining);
+                                // If only 1 item left, collapse the group
+                                if (remaining.length > 1 && wasExpanded) {
+                                    newExpandedIndices.add(currentNewIndex);
+                                }
+                                currentNewIndex++;
                             }
                             // Add the removed layer as its own group
                             newGroups.push([layerIndex]);
+                            currentNewIndex++;
                         } else {
                             newGroups.push(g);
+                            // Preserve expanded state for other groups
+                            if (this.layerGrouping.expandedGroups.has(idx)) {
+                                newExpandedIndices.add(currentNewIndex);
+                            }
+                            currentNewIndex++;
                         }
                     });
+
                     this.layerGrouping.groups = newGroups;
+                    this.layerGrouping.expandedGroups = newExpandedIndices;
                     this.renderLayerGroups();
                 });
 
@@ -665,9 +701,13 @@ class IconDecomposer {
 
             if (selectedInGroup.length === 0) return;
 
-            // Export the selected layers
+            // Export the selected layers (use full resolution if available)
             selectedInGroup.forEach(idx => {
-                exportLayers.push(this.currentLayers[idx]);
+                // Use full resolution layers for export if available, otherwise fall back to preview
+                const layerToExport = this.currentLayersFull.length > 0
+                    ? this.currentLayersFull[idx]
+                    : this.currentLayers[idx];
+                exportLayers.push(layerToExport);
                 const stats = this.layerStatistics[idx];
                 exportStats.push(stats ? stats.pixel_count : 0);
             });

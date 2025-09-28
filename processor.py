@@ -150,10 +150,18 @@ class IconProcessor:
         n_segments = segments.max() + 1
         colors = np.zeros((n_segments, 3))
 
-        for i in range(n_segments):
-            mask = segments == i
-            if mask.any():
-                colors[i] = lab_image[mask].mean(axis=0)
+        # Get unique segment IDs that actually exist
+        unique_segments = np.unique(segments)
+
+        # Use vectorized operations to compute all segment means at once
+        for channel in range(3):
+            means = ndimage.mean(
+                lab_image[:, :, channel],
+                labels=segments,
+                index=unique_segments
+            )
+            # Place means at the correct indices
+            colors[unique_segments, channel] = means
 
         return colors
 

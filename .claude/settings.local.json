@@ -10,7 +10,8 @@
       "mcp__xcode-mcp-server__run_project",
       "mcp__xcode-mcp-server__get_runtime_output",
       "Bash(say:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

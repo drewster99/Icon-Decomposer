@@ -30,6 +30,7 @@ struct ClusterCenter {
 };
 
 // Simple copy kernel to initialize textures
+// TODO: This appears to be unused currently. Consider removing
 kernel void copyTexture(texture2d<float, access::read> inTexture [[texture(0)]],
                        texture2d<float, access::write> outTexture [[texture(1)]],
                        uint2 gid [[thread_position_in_grid]]) {
@@ -140,9 +141,11 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
     float3 xyz = linear * rgbToXyz * 100.0;
 
     // Normalize by D65 illuminant
-    xyz.x /= 95.047;
-    xyz.y /= 100.000;
-    xyz.z /= 108.883;
+    float3 d65 = float3(95.047, 100.000, 108.883);
+    xyz /= d65;
+//    xyz.x /= 95.047;
+//    xyz.y /= 100.000;
+//    xyz.z /= 108.883;
 
     // XYZ to LAB conversion
     float3 f;
@@ -440,8 +443,8 @@ kernel void drawBoundaries(texture2d<float, access::read> originalTexture [[text
     // Read original color
     float4 color = originalTexture.read(gid);
 
-    // Ensure alpha is 1.0 (fully opaque)
-    color.a = 1.0;
+    // Preserve original alpha channel for transparency
+    // Note: color.a is preserved from the original image
 
     // Check if this pixel is on a boundary
     bool isBoundary = false;
@@ -461,8 +464,10 @@ kernel void drawBoundaries(texture2d<float, access::read> originalTexture [[text
     }
 
     if (isBoundary) {
-        // Blend red boundary with original (50% mix)
-        color = mix(color, float4(1.0, 0.0, 0.0, 1.0), 0.5);
+        // Blend red boundary with original (50% mix), preserving alpha
+        float3 mixedRGB = mix(color.rgb, float3(1.0, 0.0, 0.0), 0.5);
+        color.rgb = mixedRGB;
+        // Alpha remains unchanged from original
     }
 
     outputTexture.write(color, gid);

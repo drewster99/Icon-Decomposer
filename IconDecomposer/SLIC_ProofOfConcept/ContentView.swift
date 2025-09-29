@@ -8,6 +8,35 @@
 import SwiftUI
 import AppKit
 
+struct CheckerboardBackground: View {
+    let squareSize: CGFloat = 10
+
+    var body: some View {
+        GeometryReader { geometry in
+            Canvas { context, size in
+                let rows = Int(ceil(size.height / squareSize))
+                let columns = Int(ceil(size.width / squareSize))
+
+                for row in 0..<rows {
+                    for column in 0..<columns {
+                        let isLight = (row + column) % 2 == 0
+                        let color = isLight ? Color(white: 0.95) : Color(white: 0.85)
+
+                        let rect = CGRect(
+                            x: CGFloat(column) * squareSize,
+                            y: CGFloat(row) * squareSize,
+                            width: squareSize,
+                            height: squareSize
+                        )
+
+                        context.fill(Path(rect), with: .color(color))
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct ContentView: View {
     @State private var selectedImageIndex = 0
     @State private var originalImage: NSImage?
@@ -85,20 +114,19 @@ struct ContentView: View {
                 .buttonStyle(.borderedProminent)
                 .disabled(isProcessing || originalImage == nil)
 
-                // Performance metrics
-                if processingTime > 0 {
-                    VStack(spacing: 5) {
-                        Text("Processing Time: \(String(format: "%.3f", processingTime)) seconds")
-                            .font(.headline)
-                        Text("FPS Equivalent: \(String(format: "%.1f", 1.0/processingTime))")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 10)
-                    .background(Color.green.opacity(0.1))
-                    .cornerRadius(8)
+                // Performance metrics - always rendered to reserve space
+                VStack(spacing: 5) {
+                    Text("Processing Time: \(String(format: "%.3f", processingTime)) seconds")
+                        .font(.headline)
+                    Text("FPS Equivalent: \(String(format: "%.1f", processingTime > 0 ? 1.0/processingTime : 0))")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
                 }
+                .padding(.horizontal, 20)
+                .padding(.vertical, 10)
+                .background(Color.green.opacity(0.1))
+                .cornerRadius(8)
+                .opacity(processingTime > 0 ? 1.0 : 0.0)
 
                 if let error = errorMessage {
                     Text(error)
@@ -118,12 +146,14 @@ struct ContentView: View {
                         Image(nsImage: original)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .background(CheckerboardBackground())
                             .frame(maxWidth: 512, maxHeight: 512)
                             .border(Color.gray.opacity(0.3), width: 1)
                     } else {
                         Rectangle()
                             .fill(Color.gray.opacity(0.1))
-                            .frame(width: 512, height: 512)
+                            .aspectRatio(1.0, contentMode: .fit)
+                            .frame(maxWidth: 512, maxHeight: 512)
                             .overlay(
                                 Text("No image loaded")
                                     .foregroundColor(.gray)
@@ -138,16 +168,37 @@ struct ContentView: View {
                         Image(nsImage: segmented)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
+                            .background(CheckerboardBackground())
+                            .frame(maxWidth: 512, maxHeight: 512)
+                            .border(Color.gray.opacity(0.3), width: 1)
+                    } else if let original = originalImage {
+                        // Use original image with opacity 0 to maintain exact size
+                        Image(nsImage: original)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .opacity(0)
+                            .background(CheckerboardBackground())
+                            .overlay(
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.1))
+                                    .overlay(
+                                        Text("Process an image to see results")
+                                            .foregroundColor(.gray)
+                                    )
+                            )
                             .frame(maxWidth: 512, maxHeight: 512)
                             .border(Color.gray.opacity(0.3), width: 1)
                     } else {
+                        // No original image loaded
                         Rectangle()
                             .fill(Color.gray.opacity(0.1))
-                            .frame(width: 512, height: 512)
+                            .aspectRatio(1.0, contentMode: .fit)
+                            .frame(maxWidth: 512, maxHeight: 512)
                             .overlay(
                                 Text("Process an image to see results")
                                     .foregroundColor(.gray)
                             )
+                            .border(Color.gray.opacity(0.3), width: 1)
                     }
                 }
             }

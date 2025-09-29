@@ -418,8 +418,11 @@ class SLICProcessor {
             print("Failed to create CGContext for loading image")
             return
         }
-
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
+        // Clear the whole rect because `UnsafeMutableRawPointer.allocate` (for `data`, above)
+        // returns uninitialized memory.
+        context.clear(fullRect)
+        context.draw(cgImage, in: fullRect)
 
         // Load directly into texture - no conversion needed!
         texture.replace(region: MTLRegionMake2D(0, 0, width, height),

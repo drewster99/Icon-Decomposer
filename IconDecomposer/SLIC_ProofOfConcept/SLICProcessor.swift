@@ -25,6 +25,7 @@ class SLICProcessor {
     private var updateCentersPipeline: MTLComputePipelineState!
     private var finalizeCentersPipeline: MTLComputePipelineState!
     private var clearAccumulatorsPipeline: MTLComputePipelineState!
+    private var clearDistancesPipeline: MTLComputePipelineState!
     private var enforceConnectivityPipeline: MTLComputePipelineState!
     private var drawBoundariesPipeline: MTLComputePipelineState!
 
@@ -69,6 +70,7 @@ class SLICProcessor {
             updateCentersPipeline = try createPipelineState(functionName: "updateCenters")
             finalizeCentersPipeline = try createPipelineState(functionName: "finalizeCenters")
             clearAccumulatorsPipeline = try createPipelineState(functionName: "clearAccumulators")
+            clearDistancesPipeline = try createPipelineState(functionName: "clearDistances")
             enforceConnectivityPipeline = try createPipelineState(functionName: "enforceConnectivity")
             drawBoundariesPipeline = try createPipelineState(functionName: "drawBoundaries")
         } catch {
@@ -87,19 +89,33 @@ class SLICProcessor {
 
     func processImage(_ nsImage: NSImage, parameters: Parameters) -> (original: NSImage, segmented: NSImage, processingTime: Double)? {
         let startTime = CFAbsoluteTimeGetCurrent()
+        var timings: [String: Double] = [:]
+        var lastTime = startTime
+
+        func logTiming(_ stage: String) {
+            let now = CFAbsoluteTimeGetCurrent()
+            let elapsed = (now - lastTime) * 1000  // Convert to milliseconds
+            timings[stage] = elapsed
+            print(String(format: "  %-30@: %.2f ms", stage as NSString, elapsed))
+            lastTime = now
+        }
+
+        print("\n=== SLIC Processing Started ===")
 
         // Convert NSImage to CGImage
         guard let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             print("Failed to convert NSImage to CGImage")
             return nil
         }
+        logTiming("NSImage to CGImage")
 
         let width = cgImage.width
         let height = cgImage.height
+        print("Image size: \(width)x\(height)")
 
         // Create textures
         let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .rgba32Float,
+            pixelFormat: .bgra8Unorm,
             width: width,
             height: height,
             mipmapped: false
@@ -112,9 +128,11 @@ class SLICProcessor {
             print("Failed to create textures")
             return nil
         }
+        logTiming("Create textures")
 
         // Load image data into input texture
         loadImageIntoTexture(cgImage: cgImage, texture: inputTexture)
+        logTiming("Load image to texture")
 
         // Calculate grid parameters
         let gridSpacing = Int(sqrt(Double(width * height) / Double(parameters.nSegments)))
@@ -171,6 +189,7 @@ class SLICProcessor {
         )
 
         let paramsBuffer = device.makeBuffer(bytes: &params, length: MemoryLayout<SLICParams>.size, options: .storageModeShared)!
+        logTiming("Create buffers")
 
         // Initialize distances to infinity and labels to 0
         let distancesPointer = distancesBuffer.contents().bindMemory(to: Float.self, capacity: width * height)
@@ -179,6 +198,7 @@ class SLICProcessor {
             distancesPointer[i] = Float.infinity
             labelsPointer[i] = 0
         }
+        logTiming("Initialize buffers")
 
         // Execute SLIC algorithm
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {
@@ -225,15 +245,24 @@ class SLICProcessor {
 
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
+        logTiming("Initial GPU operations")
 
         // Step 4: Iterative assignment and update
+        print("\nStarting \(parameters.iterations) iterations:")
         for iteration in 0..<parameters.iterations {
+            let iterStartTime = CFAbsoluteTimeGetCurrent()
             guard let iterCommandBuffer = commandQueue.makeCommandBuffer() else { continue }
 
-            // Clear distances for new iteration
-            let distancesPointer = distancesBuffer.contents().bindMemory(to: Float.self, capacity: width * height)
-            for i in 0..<(width * height) {
-                distancesPointer[i] = Float.infinity
+            // Clear distances for new iteration using GPU
+            if let encoder = iterCommandBuffer.makeComputeCommandEncoder() {
+                encoder.setComputePipelineState(clearDistancesPipeline)
+                encoder.setBuffer(distancesBuffer, offset: 0, index: 0)
+                encoder.setBuffer(paramsBuffer, offset: 0, index: 1)
+
+                let threadsPerGrid = MTLSize(width: width * height, height: 1, depth: 1)
+                let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
+                encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+                encoder.endEncoding()
             }
 
             // Assign pixels to nearest centers
@@ -293,7 +322,11 @@ class SLICProcessor {
 
             iterCommandBuffer.commit()
             iterCommandBuffer.waitUntilCompleted()
+
+            let iterTime = (CFAbsoluteTimeGetCurrent() - iterStartTime) * 1000
+            print(String(format: "  Iteration %d: %.2f ms", iteration + 1, iterTime))
         }
+        logTiming("All iterations complete")
 
         // Step 5: Enforce connectivity (if enabled)
         if parameters.enforceConnectivity {
@@ -322,6 +355,7 @@ class SLICProcessor {
             connectivityBuffer.commit()
             connectivityBuffer.waitUntilCompleted()
         }
+        logTiming("Enforce connectivity")
 
         // Step 6: Draw boundaries
         guard let boundaryBuffer = commandQueue.makeCommandBuffer() else {
@@ -344,12 +378,23 @@ class SLICProcessor {
 
         boundaryBuffer.commit()
         boundaryBuffer.waitUntilCompleted()
+        logTiming("Draw boundaries")
+
+        // Convert output texture to NSImage
+        let segmentedImage = textureToNSImage(texture: outputTexture)
+        logTiming("Convert texture to NSImage")
 
         let endTime = CFAbsoluteTimeGetCurrent()
         let processingTime = endTime - startTime
 
-        // Convert output texture to NSImage
-        let segmentedImage = textureToNSImage(texture: outputTexture)
+        print("\n=== SLIC Processing Complete ===")
+        print(String(format: "Total time: %.2f ms (%.3f seconds)", processingTime * 1000, processingTime))
+        print("\nBreakdown:")
+        for (stage, time) in timings.sorted(by: { $0.value > $1.value }) {
+            let percentage = (time / (processingTime * 1000)) * 100
+            print(String(format: "  %-30@: %6.2f ms (%5.1f%%)", stage as NSString, time, percentage))
+        }
+        print("")
 
         return (nsImage, segmentedImage, processingTime)
     }
@@ -358,20 +403,21 @@ class SLICProcessor {
         let width = cgImage.width
         let height = cgImage.height
 
-        // First, get the image data as UInt8
-        let bytesPerPixelUInt8 = 4
-        let bytesPerRowUInt8 = width * bytesPerPixelUInt8
-        let uint8Data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRowUInt8, alignment: 1)
-        defer { uint8Data.deallocate() }
+        // With bgra8Unorm, we can load the image data directly
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        let data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRow, alignment: 1)
+        defer { data.deallocate() }
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+        // Use BGRA format to match our texture format
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
 
-        guard let context = CGContext(data: uint8Data,
+        guard let context = CGContext(data: data,
                                      width: width,
                                      height: height,
                                      bitsPerComponent: 8,
-                                     bytesPerRow: bytesPerRowUInt8,
+                                     bytesPerRow: bytesPerRow,
                                      space: colorSpace,
                                      bitmapInfo: bitmapInfo) else {
             print("Failed to create CGContext for loading image")
@@ -380,67 +426,35 @@ class SLICProcessor {
 
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 
-        // Now convert UInt8 data to float data
-        let bytesPerPixelFloat = 16 // 4 floats * 4 bytes per float
-        let bytesPerRowFloat = width * bytesPerPixelFloat
-        let floatData = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRowFloat, alignment: 16)
-        defer { floatData.deallocate() }
-
-        let uint8Ptr = uint8Data.bindMemory(to: UInt8.self, capacity: width * height * 4)
-        let floatPtr = floatData.bindMemory(to: Float.self, capacity: width * height * 4)
-
-        for i in 0..<(width * height * 4) {
-            floatPtr[i] = Float(uint8Ptr[i]) / 255.0
-        }
-
+        // Load directly into texture - no conversion needed!
         texture.replace(region: MTLRegionMake2D(0, 0, width, height),
                        mipmapLevel: 0,
-                       withBytes: floatData,
-                       bytesPerRow: bytesPerRowFloat)
+                       withBytes: data,
+                       bytesPerRow: bytesPerRow)
     }
 
     private func textureToNSImage(texture: MTLTexture) -> NSImage {
         let width = texture.width
         let height = texture.height
-        let bytesPerPixel = 16 // 4 floats * 4 bytes per float
+
+        // With bgra8Unorm, we can read the data directly as UInt8
+        let bytesPerPixel = 4
         let bytesPerRow = width * bytesPerPixel
+        let data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRow, alignment: 1)
+        defer { data.deallocate() }
 
-        let floatData = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRow, alignment: 16)
-        defer { floatData.deallocate() }
-
-        texture.getBytes(floatData,
+        texture.getBytes(data,
                         bytesPerRow: bytesPerRow,
                         from: MTLRegionMake2D(0, 0, width, height),
                         mipmapLevel: 0)
 
-        // Convert float data to UInt8 for CGImage
-        let bytesPerPixelUInt8 = 4
-        let bytesPerRowUInt8 = width * bytesPerPixelUInt8
-        let uint8Data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRowUInt8, alignment: 1)
-        defer { uint8Data.deallocate() }
-
-        let floatPtr = floatData.bindMemory(to: Float.self, capacity: width * height * 4)
-        let uint8Ptr = uint8Data.bindMemory(to: UInt8.self, capacity: width * height * 4)
-
-        for i in 0..<(width * height * 4) {
-            // Handle NaN, infinite, and out-of-range values
-            let floatValue = floatPtr[i]
-            let value: Float
-            if floatValue.isNaN || floatValue.isInfinite {
-                value = 0.0  // Default to black for invalid values
-                print("Warning: Found NaN or infinite value at index \(i)")
-            } else {
-                value = min(max(floatValue, 0.0), 1.0)
-            }
-            uint8Ptr[i] = UInt8(value * 255.0)
-        }
-
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+        // Match the BGRA format we're using
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
 
         guard let dataProvider = CGDataProvider(dataInfo: nil,
-                                                data: uint8Data,
-                                                size: height * bytesPerRowUInt8,
+                                                data: data,
+                                                size: height * bytesPerRow,
                                                 releaseData: { _, _, _ in }) else {
             return NSImage(size: NSSize(width: width, height: height))
         }
@@ -449,7 +463,7 @@ class SLICProcessor {
                                    height: height,
                                    bitsPerComponent: 8,
                                    bitsPerPixel: 32,
-                                   bytesPerRow: bytesPerRowUInt8,
+                                   bytesPerRow: bytesPerRow,
                                    space: colorSpace,
                                    bitmapInfo: CGBitmapInfo(rawValue: bitmapInfo),
                                    provider: dataProvider,

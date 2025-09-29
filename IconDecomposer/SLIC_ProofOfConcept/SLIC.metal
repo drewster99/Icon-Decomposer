@@ -41,6 +41,18 @@ kernel void copyTexture(texture2d<float, access::read> inTexture [[texture(0)]],
     outTexture.write(color, gid);
 }
 
+// Clear distances buffer to infinity
+kernel void clearDistances(device float* distances [[buffer(0)]],
+                          constant SLICParams& params [[buffer(1)]],
+                          uint gid [[thread_position_in_grid]]) {
+    uint totalPixels = params.imageWidth * params.imageHeight;
+    if (gid >= totalPixels) {
+        return;
+    }
+
+    distances[gid] = INFINITY;
+}
+
 // Gaussian blur kernel (3x3 with sigma=0.5)
 kernel void gaussianBlur(texture2d<float, access::read> inTexture [[texture(0)]],
                          texture2d<float, access::write> outTexture [[texture(1)]],

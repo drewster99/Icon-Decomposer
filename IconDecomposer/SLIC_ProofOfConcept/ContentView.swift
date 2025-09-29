@@ -171,12 +171,16 @@ struct ContentView: View {
                     Text("Segmented (Boundaries)")
                         .font(.headline)
                     if let segmented = segmentedImage {
-                        Image(nsImage: segmented)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .background(CheckerboardBackground())
-                            .frame(maxWidth: 512, maxHeight: 512)
-                            .border(Color.gray.opacity(0.3), width: 1)
+                        GeometryReader { geometry in
+                            Image(nsImage: segmented)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .background(CheckerboardBackground())
+                                .frame(width: min(512, geometry.size.width),
+                                       height: min(512, geometry.size.height))
+                        }
+                        .frame(maxWidth: 512, maxHeight: 512)
+                        .border(Color.gray.opacity(0.3), width: 1)
                     } else if let original = originalImage {
                         // Use original image with opacity 0 to maintain exact size
                         Image(nsImage: original)
@@ -213,7 +217,7 @@ struct ContentView: View {
             Spacer()
         }
         .padding()
-        .frame(minWidth: 1200, minHeight: 800)
+        .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             loadSelectedImage()
         }
@@ -232,11 +236,11 @@ struct ContentView: View {
             originalImage = image
         } else {
             // Create a placeholder gradient image for testing
-            originalImage = createPlaceholderImage(index: selectedImageIndex)
+            originalImage = createPlaceholderImage()
         }
     }
 
-    private func createPlaceholderImage(index: Int) -> NSImage {
+    private func createPlaceholderImage() -> NSImage {
         let size = NSSize(width: 1024, height: 1024)
         let image = NSImage(size: size)
 
@@ -245,32 +249,6 @@ struct ContentView: View {
         // Create different patterns for each test image
         let context = NSGraphicsContext.current!.cgContext
 
-        switch index {
-        case 0:
-            // Gradient circles
-            let gradient = CGGradient(
-                colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                colors: [NSColor.blue.cgColor, NSColor.cyan.cgColor] as CFArray,
-                locations: [0, 1]
-            )!
-            context.drawRadialGradient(gradient,
-                                      startCenter: CGPoint(x: 512, y: 512),
-                                      startRadius: 0,
-                                      endCenter: CGPoint(x: 512, y: 512),
-                                      endRadius: 400,
-                                      options: [])
-
-        case 1:
-            // Stripes
-            context.setFillColor(NSColor.orange.cgColor)
-            context.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
-            context.setFillColor(NSColor.yellow.cgColor)
-            for i in stride(from: 0, to: 1024, by: 128) {
-                context.fill(CGRect(x: i, y: 0, width: 64, height: 1024))
-            }
-
-        case 2:
-            // Checkerboard
             let colors = [NSColor.purple, NSColor.magenta]
             for y in stride(from: 0, to: 1024, by: 128) {
                 for x in stride(from: 0, to: 1024, by: 128) {
@@ -280,9 +258,6 @@ struct ContentView: View {
                 }
             }
 
-        default:
-            break
-        }
 
         image.unlockFocus()
         return image
@@ -310,6 +285,8 @@ struct ContentView: View {
                 DispatchQueue.main.async {
                     print("Processing succeeded")
                     print("Segmented image size: \(result.1.size)")
+                    print("Segmented image isValid: \(result.1.isValid)")
+                    print("Segmented image representations: \(result.1.representations)")
                     self.segmentedImage = result.1  // result.segmented is the second element in tuple
                     self.processingTime = result.2   // result.processingTime is the third element
                     self.isProcessing = false

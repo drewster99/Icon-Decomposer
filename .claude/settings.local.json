@@ -12,7 +12,8 @@
       "Bash(say:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "mcp__xcode-mcp-server__get_project_schemes"
+      "mcp__xcode-mcp-server__get_project_schemes",
+      "mcp__xcode-mcp-server__get_build_errors"
     ],
     "deny": [],
     "ask": []

@@ -88,10 +88,16 @@ class SLICProcessor {
     }
     
     func processImage(_ nsImage: NSImage, parameters: Parameters) -> (original: NSImage, segmented: NSImage, processingTime: Double)? {
+        // Validate parameters
+        guard parameters.nSegments > 0 else {
+            print("Invalid parameters: nSegments must be greater than 0")
+            return nil
+        }
+
         let startTime = CFAbsoluteTimeGetCurrent()
         var timings: [String: Double] = [:]
         var lastTime = startTime
-        
+
         func logTiming(_ stage: String) {
             let now = CFAbsoluteTimeGetCurrent()
             let elapsed = (now - lastTime) * 1000  // Convert to milliseconds
@@ -99,20 +105,20 @@ class SLICProcessor {
             print(String(format: "  %-30@: %.2f ms", stage as NSString, elapsed))
             lastTime = now
         }
-        
+
         print("\n=== SLIC Processing Started ===")
-        
+
         // Convert NSImage to CGImage
         guard let cgImage = nsImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             print("Failed to convert NSImage to CGImage")
             return nil
         }
         logTiming("NSImage to CGImage")
-        
+
         let width = cgImage.width
         let height = cgImage.height
         print("Image size: \(width)x\(height)")
-        
+
         // Create textures
         let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: .bgra8Unorm,
@@ -187,8 +193,11 @@ class SLICProcessor {
             numCenters: UInt32(numCenters),
             iteration: 0
         )
-        
-        let paramsBuffer = device.makeBuffer(bytes: &params, length: MemoryLayout<SLICParams>.size, options: .storageModeShared)!
+
+        guard let paramsBuffer = device.makeBuffer(bytes: &params, length: MemoryLayout<SLICParams>.size, options: .storageModeShared) else {
+            print("Failed to create params buffer")
+            return nil
+        }
         logTiming("Create buffers")
         
         // No need to initialize buffers:
@@ -246,7 +255,10 @@ class SLICProcessor {
         print("\nStarting \(parameters.iterations) iterations:")
         for iteration in 0..<parameters.iterations {
             let iterStartTime = CFAbsoluteTimeGetCurrent()
-            guard let iterCommandBuffer = commandQueue.makeCommandBuffer() else { continue }
+            guard let iterCommandBuffer = commandQueue.makeCommandBuffer() else {
+                print("Failed to create command buffer for iteration \(iteration)")
+                return nil
+            }
             
             // Clear distances for new iteration using GPU
             if let encoder = iterCommandBuffer.makeComputeCommandEncoder() {

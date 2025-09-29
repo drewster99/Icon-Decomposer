@@ -108,13 +108,14 @@ struct ContentView: View {
 
                 // Process button
                 Button(action: processImage) {
-                    if isProcessing {
-                        ProgressView()
-                            .progressViewStyle(CircularProgressViewStyle())
-                            .scaleEffect(0.8)
-                    } else {
-                        Text("Process Image")
-                    }
+                    Text("Process Image")
+                        .overlay(content: {
+                            ProgressView()
+                                .progressViewStyle(CircularProgressViewStyle())
+                                .scaleEffect(0.8)
+                                .opacity(isProcessing ? 1.0 : 0.0)
+                            
+                        })
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(isProcessing || originalImage == nil)
@@ -264,9 +265,13 @@ struct ContentView: View {
     }
 
     private func processImage() {
-        guard let image = originalImage,
-              let processor = processor else {
-            errorMessage = processor == nil ? "Metal processor not available" : "No image available"
+        guard let image = originalImage else {
+            errorMessage = "No image available"
+            return
+        }
+
+        guard let processor = processor else {
+            errorMessage = "Metal processor not available"
             return
         }
 
@@ -286,7 +291,6 @@ struct ContentView: View {
                     print("Processing succeeded")
                     print("Segmented image size: \(result.1.size)")
                     print("Segmented image isValid: \(result.1.isValid)")
-                    print("Segmented image representations: \(result.1.representations)")
                     self.segmentedImage = result.1  // result.segmented is the second element in tuple
                     self.processingTime = result.2   // result.processingTime is the third element
                     self.isProcessing = false

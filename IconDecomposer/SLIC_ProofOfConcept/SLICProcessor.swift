@@ -248,6 +248,7 @@ class SLICProcessor {
         }
         
         commandBuffer.commit()
+        // This waitUntilCompleted is only here to support timing breakdowns and is not necessary for operation
         commandBuffer.waitUntilCompleted()
         logTiming("Initial GPU operations")
         
@@ -328,8 +329,9 @@ class SLICProcessor {
             }
             
             iterCommandBuffer.commit()
+            // This waitUntilCompleted is only here to support timing breakdowns and is not necessary for operation
             iterCommandBuffer.waitUntilCompleted()
-            
+
             let iterTime = (CFAbsoluteTimeGetCurrent() - iterStartTime) * 1000
             print(String(format: "  Iteration %d: %.2f ms", iteration + 1, iterTime))
         }
@@ -360,6 +362,7 @@ class SLICProcessor {
             }
             
             connectivityBuffer.commit()
+            // This waitUntilCompleted is only here to support timing breakdowns and is not necessary for operation
             connectivityBuffer.waitUntilCompleted()
         }
         logTiming("Enforce connectivity")

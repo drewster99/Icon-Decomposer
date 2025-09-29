@@ -20,7 +20,6 @@ class SLICProcessor {
     // These are implicitly unwrapped optionals because they can't be initialized until after
     // the device and library are available. They're guaranteed to be non-nil after successful
     // initialization since init?() returns nil if any pipeline creation fails.
-    private var copyTexturePipeline: MTLComputePipelineState!
     private var gaussianBlurPipeline: MTLComputePipelineState!
     private var rgbToLabPipeline: MTLComputePipelineState!
     private var initializeCentersPipeline: MTLComputePipelineState!
@@ -65,7 +64,6 @@ class SLICProcessor {
         
         // Create pipeline states
         do {
-            copyTexturePipeline = try createPipelineState(functionName: "copyTexture")
             gaussianBlurPipeline = try createPipelineState(functionName: "gaussianBlur")
             rgbToLabPipeline = try createPipelineState(functionName: "rgbToLab")
             initializeCentersPipeline = try createPipelineState(functionName: "initializeCenters")
@@ -98,6 +96,8 @@ class SLICProcessor {
         }
 
         let startTime = CFAbsoluteTimeGetCurrent()
+
+        #if DEBUG
         var timings: [String: Double] = [:]
         var lastTime = startTime
 
@@ -108,6 +108,11 @@ class SLICProcessor {
             print(String(format: "  %-30@: %.2f ms", stage as NSString, elapsed))
             lastTime = now
         }
+        #else
+        func logTiming(_ stage: String) {
+            // No-op in release builds
+        }
+        #endif
 
         print("\n=== SLIC Processing Started ===")
 
@@ -251,14 +256,20 @@ class SLICProcessor {
         }
         
         commandBuffer.commit()
+        #if DEBUG
         // This waitUntilCompleted is only here to support timing breakdowns and is not necessary for operation
         commandBuffer.waitUntilCompleted()
+        #endif
         logTiming("Initial GPU operations")
         
         // Step 4: Iterative assignment and update
+        #if DEBUG
         print("\nStarting \(parameters.iterations) iterations:")
+        #endif
         for iteration in 0..<parameters.iterations {
+            #if DEBUG
             let iterStartTime = CFAbsoluteTimeGetCurrent()
+            #endif
             guard let iterCommandBuffer = commandQueue.makeCommandBuffer() else {
                 print("Failed to create command buffer for iteration \(iteration)")
                 return nil
@@ -332,11 +343,13 @@ class SLICProcessor {
             }
             
             iterCommandBuffer.commit()
+            #if DEBUG
             // This waitUntilCompleted is only here to support timing breakdowns and is not necessary for operation
             iterCommandBuffer.waitUntilCompleted()
 
             let iterTime = (CFAbsoluteTimeGetCurrent() - iterStartTime) * 1000
             print(String(format: "  Iteration %d: %.2f ms", iteration + 1, iterTime))
+            #endif
         }
         logTiming("All iterations complete")
         
@@ -365,8 +378,10 @@ class SLICProcessor {
             }
             
             connectivityBuffer.commit()
+            #if DEBUG
             // This waitUntilCompleted is only here to support timing breakdowns and is not necessary for operation
             connectivityBuffer.waitUntilCompleted()
+            #endif
         }
         logTiming("Enforce connectivity")
         
@@ -402,12 +417,14 @@ class SLICProcessor {
         
         print("\n=== SLIC Processing Complete ===")
         print(String(format: "Total time: %.2f ms (%.3f seconds)", processingTime * 1000, processingTime))
+        #if DEBUG
         print("\nBreakdown:")
         for (stage, time) in timings.sorted(by: { $0.value > $1.value }) {
             let percentage = (time / (processingTime * 1000)) * 100
             print(String(format: "  %-30@: %6.2f ms (%5.1f%%)", stage as NSString, time, percentage))
         }
         print("")
+        #endif
         
         return (nsImage, segmentedImage, processingTime)
     }

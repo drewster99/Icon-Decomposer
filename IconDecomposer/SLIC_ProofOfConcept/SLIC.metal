@@ -29,19 +29,6 @@ struct ClusterCenter {
     float b;
 };
 
-// Simple copy kernel to initialize textures
-// TODO: This appears to be unused currently. Consider removing
-kernel void copyTexture(texture2d<float, access::read> inTexture [[texture(0)]],
-                       texture2d<float, access::write> outTexture [[texture(1)]],
-                       uint2 gid [[thread_position_in_grid]]) {
-    if (gid.x >= outTexture.get_width() || gid.y >= outTexture.get_height()) {
-        return;
-    }
-
-    float4 color = inTexture.read(gid);
-    outTexture.write(color, gid);
-}
-
 // Clear distances buffer to infinity
 kernel void clearDistances(device float* distances [[buffer(0)]],
                           constant SLICParams& params [[buffer(1)]],

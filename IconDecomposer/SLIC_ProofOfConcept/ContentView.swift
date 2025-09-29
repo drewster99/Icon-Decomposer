@@ -1,0 +1,270 @@
+//
+//  ContentView.swift
+//  SLIC_ProofOfConcept
+//
+//  Created by Andrew Benson on 9/28/25.
+//
+
+import SwiftUI
+import AppKit
+
+struct ContentView: View {
+    @State private var selectedImageIndex = 0
+    @State private var originalImage: NSImage?
+    @State private var segmentedImage: NSImage?
+    @State private var processingTime: Double = 0
+    @State private var isProcessing = false
+    @State private var errorMessage: String?
+
+    // Test image names (will be added to Assets.xcassets)
+    let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3"]
+
+    // SLIC parameters (matching Python defaults)
+    @State private var nSegments: Double = 1000
+    @State private var compactness: Double = 25
+    @State private var iterations: Double = 10
+    @State private var enforceConnectivity = true
+
+    private let processor = SLICProcessor()
+
+    var body: some View {
+        VStack(spacing: 20) {
+            // Title and controls
+            VStack(spacing: 15) {
+                Text("SLIC Superpixel Segmentation")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+
+                // Image selector
+                Picker("Test Image", selection: $selectedImageIndex) {
+                    ForEach(0..<testImageNames.count, id: \.self) { index in
+                        Text("Test Image \(index + 1)").tag(index)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .frame(maxWidth: 400)
+                .onChange(of: selectedImageIndex) { _ in
+                    loadSelectedImage()
+                }
+
+                // Parameters
+                VStack(spacing: 10) {
+                    HStack {
+                        Text("Segments: \(Int(nSegments))")
+                            .frame(width: 150, alignment: .leading)
+                        Slider(value: $nSegments, in: 200...2000, step: 50)
+                    }
+
+                    HStack {
+                        Text("Compactness: \(Int(compactness))")
+                            .frame(width: 150, alignment: .leading)
+                        Slider(value: $compactness, in: 1...50, step: 1)
+                    }
+
+                    HStack {
+                        Text("Iterations: \(Int(iterations))")
+                            .frame(width: 150, alignment: .leading)
+                        Slider(value: $iterations, in: 5...20, step: 1)
+                    }
+
+                    Toggle("Enforce Connectivity", isOn: $enforceConnectivity)
+                        .frame(maxWidth: 300)
+                }
+                .frame(maxWidth: 600)
+
+                // Process button
+                Button(action: processImage) {
+                    if isProcessing {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle())
+                            .scaleEffect(0.8)
+                    } else {
+                        Text("Process Image")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isProcessing || originalImage == nil)
+
+                // Performance metrics
+                if processingTime > 0 {
+                    VStack(spacing: 5) {
+                        Text("Processing Time: \(String(format: "%.3f", processingTime)) seconds")
+                            .font(.headline)
+                        Text("FPS Equivalent: \(String(format: "%.1f", 1.0/processingTime))")
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 10)
+                    .background(Color.green.opacity(0.1))
+                    .cornerRadius(8)
+                }
+
+                if let error = errorMessage {
+                    Text(error)
+                        .foregroundColor(.red)
+                        .padding()
+                }
+            }
+
+            Divider()
+
+            // Image display
+            HStack(spacing: 20) {
+                VStack {
+                    Text("Original")
+                        .font(.headline)
+                    if let original = originalImage {
+                        Image(nsImage: original)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: 512, maxHeight: 512)
+                            .border(Color.gray.opacity(0.3), width: 1)
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.1))
+                            .frame(width: 512, height: 512)
+                            .overlay(
+                                Text("No image loaded")
+                                    .foregroundColor(.gray)
+                            )
+                    }
+                }
+
+                VStack {
+                    Text("Segmented (Boundaries)")
+                        .font(.headline)
+                    if let segmented = segmentedImage {
+                        Image(nsImage: segmented)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(maxWidth: 512, maxHeight: 512)
+                            .border(Color.gray.opacity(0.3), width: 1)
+                    } else {
+                        Rectangle()
+                            .fill(Color.gray.opacity(0.1))
+                            .frame(width: 512, height: 512)
+                            .overlay(
+                                Text("Process an image to see results")
+                                    .foregroundColor(.gray)
+                            )
+                    }
+                }
+            }
+            .padding()
+
+            Spacer()
+        }
+        .padding()
+        .frame(minWidth: 1200, minHeight: 800)
+        .onAppear {
+            loadSelectedImage()
+        }
+    }
+
+    private func loadSelectedImage() {
+        errorMessage = nil
+        segmentedImage = nil
+        processingTime = 0
+
+        let imageName = testImageNames[selectedImageIndex]
+
+        // For now, create a placeholder image
+        // In the real implementation, this will load from Assets.xcassets
+        if let image = NSImage(named: imageName) {
+            originalImage = image
+        } else {
+            // Create a placeholder gradient image for testing
+            originalImage = createPlaceholderImage(index: selectedImageIndex)
+        }
+    }
+
+    private func createPlaceholderImage(index: Int) -> NSImage {
+        let size = NSSize(width: 1024, height: 1024)
+        let image = NSImage(size: size)
+
+        image.lockFocus()
+
+        // Create different patterns for each test image
+        let context = NSGraphicsContext.current!.cgContext
+
+        switch index {
+        case 0:
+            // Gradient circles
+            let gradient = CGGradient(
+                colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                colors: [NSColor.blue.cgColor, NSColor.cyan.cgColor] as CFArray,
+                locations: [0, 1]
+            )!
+            context.drawRadialGradient(gradient,
+                                      startCenter: CGPoint(x: 512, y: 512),
+                                      startRadius: 0,
+                                      endCenter: CGPoint(x: 512, y: 512),
+                                      endRadius: 400,
+                                      options: [])
+
+        case 1:
+            // Stripes
+            context.setFillColor(NSColor.orange.cgColor)
+            context.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+            context.setFillColor(NSColor.yellow.cgColor)
+            for i in stride(from: 0, to: 1024, by: 128) {
+                context.fill(CGRect(x: i, y: 0, width: 64, height: 1024))
+            }
+
+        case 2:
+            // Checkerboard
+            let colors = [NSColor.purple, NSColor.magenta]
+            for y in stride(from: 0, to: 1024, by: 128) {
+                for x in stride(from: 0, to: 1024, by: 128) {
+                    let colorIndex = ((x / 128) + (y / 128)) % 2
+                    context.setFillColor(colors[colorIndex].cgColor)
+                    context.fill(CGRect(x: x, y: y, width: 128, height: 128))
+                }
+            }
+
+        default:
+            break
+        }
+
+        image.unlockFocus()
+        return image
+    }
+
+    private func processImage() {
+        guard let processor = processor,
+              let image = originalImage else {
+            errorMessage = "No processor or image available"
+            return
+        }
+
+        isProcessing = true
+        errorMessage = nil
+
+        let parameters = SLICProcessor.Parameters(
+            nSegments: Int(nSegments),
+            compactness: Float(compactness),
+            iterations: Int(iterations),
+            enforceConnectivity: enforceConnectivity
+        )
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            if let result = processor.processImage(image, parameters: parameters) {
+                DispatchQueue.main.async {
+                    self.segmentedImage = result.segmented
+                    self.processingTime = result.processingTime
+                    self.isProcessing = false
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.errorMessage = "Processing failed"
+                    self.isProcessing = false
+                }
+            }
+        }
+    }
+}
+
+#Preview {
+    ContentView()
+}

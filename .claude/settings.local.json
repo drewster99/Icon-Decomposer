@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__xcode-mcp-server__get_xcode_projects",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__xcode-mcp-server__get_project_hierarchy",
+      "mcp__xcode-mcp-server__build_project",
+      "mcp__xcode-mcp-server__run_project",
+      "mcp__xcode-mcp-server__get_runtime_output",
+      "Bash(say:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

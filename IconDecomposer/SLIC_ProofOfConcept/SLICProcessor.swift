@@ -17,6 +17,9 @@ class SLICProcessor {
     private let library: MTLLibrary
     
     // Pipeline states
+    // These are implicitly unwrapped optionals because they can't be initialized until after
+    // the device and library are available. They're guaranteed to be non-nil after successful
+    // initialization since init?() returns nil if any pipeline creation fails.
     private var copyTexturePipeline: MTLComputePipelineState!
     private var gaussianBlurPipeline: MTLComputePipelineState!
     private var rgbToLabPipeline: MTLComputePipelineState!

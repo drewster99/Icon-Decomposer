@@ -43,7 +43,7 @@ struct ContentView: View {
                 }
                 .pickerStyle(SegmentedPickerStyle())
                 .frame(maxWidth: 400)
-                .onChange(of: selectedImageIndex) { _ in
+                .onChange(of: selectedImageIndex) { _, _ in
                     loadSelectedImage()
                 }
 
@@ -232,9 +232,9 @@ struct ContentView: View {
     }
 
     private func processImage() {
-        guard let processor = processor,
-              let image = originalImage else {
-            errorMessage = "No processor or image available"
+        guard let image = originalImage,
+              let processor = processor else {
+            errorMessage = processor == nil ? "Metal processor not available" : "No image available"
             return
         }
 
@@ -251,12 +251,15 @@ struct ContentView: View {
         DispatchQueue.global(qos: .userInitiated).async {
             if let result = processor.processImage(image, parameters: parameters) {
                 DispatchQueue.main.async {
-                    self.segmentedImage = result.segmented
-                    self.processingTime = result.processingTime
+                    print("Processing succeeded")
+                    print("Segmented image size: \(result.1.size)")
+                    self.segmentedImage = result.1  // result.segmented is the second element in tuple
+                    self.processingTime = result.2   // result.processingTime is the third element
                     self.isProcessing = false
                 }
             } else {
                 DispatchQueue.main.async {
+                    print("Processing returned nil")
                     self.errorMessage = "Processing failed"
                     self.isProcessing = false
                 }

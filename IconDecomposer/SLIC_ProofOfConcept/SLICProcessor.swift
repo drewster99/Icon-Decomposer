@@ -17,6 +17,7 @@ class SLICProcessor {
     private let library: MTLLibrary
 
     // Pipeline states
+    private var copyTexturePipeline: MTLComputePipelineState!
     private var gaussianBlurPipeline: MTLComputePipelineState!
     private var rgbToLabPipeline: MTLComputePipelineState!
     private var initializeCentersPipeline: MTLComputePipelineState!
@@ -60,6 +61,7 @@ class SLICProcessor {
 
         // Create pipeline states
         do {
+            copyTexturePipeline = try createPipelineState(functionName: "copyTexture")
             gaussianBlurPipeline = try createPipelineState(functionName: "gaussianBlur")
             rgbToLabPipeline = try createPipelineState(functionName: "rgbToLab")
             initializeCentersPipeline = try createPipelineState(functionName: "initializeCenters")
@@ -355,27 +357,46 @@ class SLICProcessor {
     private func loadImageIntoTexture(cgImage: CGImage, texture: MTLTexture) {
         let width = cgImage.width
         let height = cgImage.height
-        let bytesPerPixel = 16 // 4 floats * 4 bytes per float
-        let bytesPerRow = width * bytesPerPixel
 
-        let data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRow, alignment: 16)
-        defer { data.deallocate() }
+        // First, get the image data as UInt8
+        let bytesPerPixelUInt8 = 4
+        let bytesPerRowUInt8 = width * bytesPerPixelUInt8
+        let uint8Data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRowUInt8, alignment: 1)
+        defer { uint8Data.deallocate() }
 
         let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let context = CGContext(data: data,
-                               width: width,
-                               height: height,
-                               bitsPerComponent: 32,
-                               bytesPerRow: bytesPerRow,
-                               space: colorSpace,
-                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.floatComponents.rawValue)!
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder32Big.rawValue
+
+        guard let context = CGContext(data: uint8Data,
+                                     width: width,
+                                     height: height,
+                                     bitsPerComponent: 8,
+                                     bytesPerRow: bytesPerRowUInt8,
+                                     space: colorSpace,
+                                     bitmapInfo: bitmapInfo) else {
+            print("Failed to create CGContext for loading image")
+            return
+        }
 
         context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
 
+        // Now convert UInt8 data to float data
+        let bytesPerPixelFloat = 16 // 4 floats * 4 bytes per float
+        let bytesPerRowFloat = width * bytesPerPixelFloat
+        let floatData = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRowFloat, alignment: 16)
+        defer { floatData.deallocate() }
+
+        let uint8Ptr = uint8Data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+        let floatPtr = floatData.bindMemory(to: Float.self, capacity: width * height * 4)
+
+        for i in 0..<(width * height * 4) {
+            floatPtr[i] = Float(uint8Ptr[i]) / 255.0
+        }
+
         texture.replace(region: MTLRegionMake2D(0, 0, width, height),
                        mipmapLevel: 0,
-                       withBytes: data,
-                       bytesPerRow: bytesPerRow)
+                       withBytes: floatData,
+                       bytesPerRow: bytesPerRowFloat)
     }
 
     private func textureToNSImage(texture: MTLTexture) -> NSImage {
@@ -384,24 +405,60 @@ class SLICProcessor {
         let bytesPerPixel = 16 // 4 floats * 4 bytes per float
         let bytesPerRow = width * bytesPerPixel
 
-        let data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRow, alignment: 16)
-        defer { data.deallocate() }
+        let floatData = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRow, alignment: 16)
+        defer { floatData.deallocate() }
 
-        texture.getBytes(data,
+        texture.getBytes(floatData,
                         bytesPerRow: bytesPerRow,
                         from: MTLRegionMake2D(0, 0, width, height),
                         mipmapLevel: 0)
 
-        let colorSpace = CGColorSpaceCreateDeviceRGB()
-        let context = CGContext(data: data,
-                               width: width,
-                               height: height,
-                               bitsPerComponent: 32,
-                               bytesPerRow: bytesPerRow,
-                               space: colorSpace,
-                               bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.floatComponents.rawValue)!
+        // Convert float data to UInt8 for CGImage
+        let bytesPerPixelUInt8 = 4
+        let bytesPerRowUInt8 = width * bytesPerPixelUInt8
+        let uint8Data = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRowUInt8, alignment: 1)
+        defer { uint8Data.deallocate() }
 
-        let cgImage = context.makeImage()!
+        let floatPtr = floatData.bindMemory(to: Float.self, capacity: width * height * 4)
+        let uint8Ptr = uint8Data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+
+        for i in 0..<(width * height * 4) {
+            // Handle NaN, infinite, and out-of-range values
+            let floatValue = floatPtr[i]
+            let value: Float
+            if floatValue.isNaN || floatValue.isInfinite {
+                value = 0.0  // Default to black for invalid values
+                print("Warning: Found NaN or infinite value at index \(i)")
+            } else {
+                value = min(max(floatValue, 0.0), 1.0)
+            }
+            uint8Ptr[i] = UInt8(value * 255.0)
+        }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+
+        guard let dataProvider = CGDataProvider(dataInfo: nil,
+                                                data: uint8Data,
+                                                size: height * bytesPerRowUInt8,
+                                                releaseData: { _, _, _ in }) else {
+            return NSImage(size: NSSize(width: width, height: height))
+        }
+
+        guard let cgImage = CGImage(width: width,
+                                   height: height,
+                                   bitsPerComponent: 8,
+                                   bitsPerPixel: 32,
+                                   bytesPerRow: bytesPerRowUInt8,
+                                   space: colorSpace,
+                                   bitmapInfo: CGBitmapInfo(rawValue: bitmapInfo),
+                                   provider: dataProvider,
+                                   decode: nil,
+                                   shouldInterpolate: true,
+                                   intent: .defaultIntent) else {
+            return NSImage(size: NSSize(width: width, height: height))
+        }
+
         return NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
     }
 }

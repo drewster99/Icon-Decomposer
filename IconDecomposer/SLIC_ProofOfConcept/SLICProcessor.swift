@@ -191,14 +191,9 @@ class SLICProcessor {
         let paramsBuffer = device.makeBuffer(bytes: &params, length: MemoryLayout<SLICParams>.size, options: .storageModeShared)!
         logTiming("Create buffers")
 
-        // Initialize distances to infinity and labels to 0
-        let distancesPointer = distancesBuffer.contents().bindMemory(to: Float.self, capacity: width * height)
-        let labelsPointer = labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: width * height)
-        for i in 0..<(width * height) {
-            distancesPointer[i] = Float.infinity
-            labelsPointer[i] = 0
-        }
-        logTiming("Initialize buffers")
+        // No need to initialize buffers:
+        // - Labels are already 0 from makeBuffer
+        // - Distances will be set to infinity by GPU in first iteration
 
         // Execute SLIC algorithm
         guard let commandBuffer = commandQueue.makeCommandBuffer() else {

@@ -46,7 +46,7 @@ struct ContentView: View {
     @State private var errorMessage: String?
 
     // Test image names (will be added to Assets.xcassets)
-    let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3"]
+    let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4"]
 
     // SLIC parameters (matching Python defaults)
     @State private var nSegments: Double = 1000
@@ -60,9 +60,14 @@ struct ContentView: View {
         VStack(spacing: 20) {
             // Title and controls
             VStack(spacing: 15) {
-                Text("SLIC Superpixel Segmentation")
-                    .font(.largeTitle)
-                    .fontWeight(.bold)
+                VStack(spacing: 10) {
+                    Text("SLIC Superpixel Segmentation")
+                        .font(.largeTitle)
+                        .fontWeight(.bold)
+                    Text("(Simple Linear Iterative Clustering)")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
 
                 // Image selector
                 Picker("Test Image", selection: $selectedImageIndex) {
@@ -118,7 +123,8 @@ struct ContentView: View {
                 VStack(spacing: 5) {
                     Text("Processing Time: \(String(format: "%.3f", processingTime)) seconds")
                         .font(.headline)
-                    Text("FPS Equivalent: \(String(format: "%.1f", processingTime > 0 ? 1.0/processingTime : 0))")
+                    let fps = Int(processingTime > 0.0 ? 1.0/processingTime : 0.0)
+                    Text("FPS Equivalent: \(fps)")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                 }

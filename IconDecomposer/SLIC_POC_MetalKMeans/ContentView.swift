@@ -361,9 +361,9 @@ struct ContentView: View {
 
                     let kmeansStartTime = CFAbsoluteTimeGetCurrent()
 
-                    // Extract superpixels
+                    // Extract superpixels (using Metal GPU acceleration)
                     let extractStart = CFAbsoluteTimeGetCurrent()
-                    let superpixelData = SuperpixelProcessor.extractSuperpixels(
+                    let superpixelData = SuperpixelProcessor.extractSuperpixelsMetal(
                         from: labBuffer,
                         labelsBuffer: labelsBuffer,
                         width: result.width,

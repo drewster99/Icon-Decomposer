@@ -11,8 +11,26 @@ import Foundation
 import Metal
 import simd
 
+/// Parameters for superpixel extraction (matches Metal struct)
+struct SuperpixelExtractionParams {
+    let imageWidth: UInt32
+    let imageHeight: UInt32
+    let maxLabel: UInt32
+}
+
 /// Processes SLIC output to extract superpixel features for clustering
 class SuperpixelProcessor {
+
+    // Metal objects for GPU acceleration
+    private static let device = MTLCreateSystemDefaultDevice()!
+    private static let commandQueue = device.makeCommandQueue()!
+    private static let library = device.makeDefaultLibrary()!
+
+    // Lazy-loaded pipeline state
+    private static var accumulateSuperpixelFeaturesPipeline: MTLComputePipelineState = {
+        let function = library.makeFunction(name: "accumulateSuperpixelFeatures")!
+        return try! device.makeComputePipelineState(function: function)
+    }()
 
     /// Represents a superpixel with its average color and metadata
     struct Superpixel {
@@ -104,7 +122,137 @@ class SuperpixelProcessor {
             superpixels.append(superpixel)
         }
 
-        print("Extracted \(superpixels.count) superpixels from \(width)x\(height) image")
+        print("Extracted \(superpixels.count) superpixels from \(width)x\(height) image (CPU)")
+
+        return SuperpixelData(
+            superpixels: superpixels,
+            labelMap: labelMap,
+            imageWidth: width,
+            imageHeight: height,
+            uniqueLabels: uniqueLabels
+        )
+    }
+
+    /// Extract superpixel features using Metal GPU acceleration
+    /// - Parameters:
+    ///   - labBuffer: Buffer containing LAB color values for each pixel
+    ///   - labelsBuffer: Buffer containing superpixel label for each pixel
+    ///   - width: Image width
+    ///   - height: Image height
+    /// - Returns: Processed superpixel data ready for clustering
+    static func extractSuperpixelsMetal(
+        from labBuffer: MTLBuffer,
+        labelsBuffer: MTLBuffer,
+        width: Int,
+        height: Int
+    ) -> SuperpixelData {
+
+        let pixelCount = width * height
+
+        // First, find unique labels and max label (need to do on CPU)
+        let labelsPointer = labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: pixelCount)
+        var labelMap = Array<UInt32>(repeating: 0, count: pixelCount)
+        var maxLabel: UInt32 = 0
+
+        for i in 0..<pixelCount {
+            let label = labelsPointer[i]
+            labelMap[i] = label
+            maxLabel = max(maxLabel, label)
+        }
+
+        let uniqueLabels = Set(labelMap)
+        let numSuperpixels = Int(maxLabel) + 1  // Labels are 0-indexed
+
+        // Create Metal buffers for accumulation
+        // Use maxLabel+1 as array size to handle sparse labels
+        let colorAccumulatorsBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size * numSuperpixels * 3,
+            options: .storageModeShared
+        )!
+
+        let positionAccumulatorsBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size * numSuperpixels * 2,
+            options: .storageModeShared
+        )!
+
+        let pixelCountsBuffer = device.makeBuffer(
+            length: MemoryLayout<Int32>.size * numSuperpixels,
+            options: .storageModeShared
+        )!
+
+        // Zero out the accumulator buffers
+        memset(colorAccumulatorsBuffer.contents(), 0, colorAccumulatorsBuffer.length)
+        memset(positionAccumulatorsBuffer.contents(), 0, positionAccumulatorsBuffer.length)
+        memset(pixelCountsBuffer.contents(), 0, pixelCountsBuffer.length)
+
+        // Create parameter struct
+        var params = SuperpixelExtractionParams(
+            imageWidth: UInt32(width),
+            imageHeight: UInt32(height),
+            maxLabel: maxLabel
+        )
+
+        // Dispatch Metal kernel
+        let commandBuffer = commandQueue.makeCommandBuffer()!
+        let encoder = commandBuffer.makeComputeCommandEncoder()!
+
+        encoder.setComputePipelineState(accumulateSuperpixelFeaturesPipeline)
+        encoder.setBuffer(labBuffer, offset: 0, index: 0)
+        encoder.setBuffer(labelsBuffer, offset: 0, index: 1)
+        encoder.setBuffer(colorAccumulatorsBuffer, offset: 0, index: 2)
+        encoder.setBuffer(positionAccumulatorsBuffer, offset: 0, index: 3)
+        encoder.setBuffer(pixelCountsBuffer, offset: 0, index: 4)
+        encoder.setBytes(&params, length: MemoryLayout<SuperpixelExtractionParams>.size, index: 5)
+
+        let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
+        let threadgroupsPerGrid = MTLSize(
+            width: (pixelCount + 255) / 256,
+            height: 1,
+            depth: 1
+        )
+        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+
+        // Read back results and create Superpixel objects
+        let colorAccumulators = colorAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 3)
+        let positionAccumulators = positionAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 2)
+        let pixelCounts = pixelCountsBuffer.contents().bindMemory(to: Int32.self, capacity: numSuperpixels)
+
+        var superpixels: [Superpixel] = []
+
+        for label in uniqueLabels.sorted() {
+            let labelInt = Int(label)
+            let count = Int(pixelCounts[labelInt])
+
+            guard count > 0 else { continue }
+
+            // Calculate averages
+            let colorBaseIndex = labelInt * 3
+            let avgColor = SIMD3<Float>(
+                colorAccumulators[colorBaseIndex + 0] / Float(count),
+                colorAccumulators[colorBaseIndex + 1] / Float(count),
+                colorAccumulators[colorBaseIndex + 2] / Float(count)
+            )
+
+            let positionBaseIndex = labelInt * 2
+            let avgPosition = SIMD2<Float>(
+                positionAccumulators[positionBaseIndex + 0] / Float(count),
+                positionAccumulators[positionBaseIndex + 1] / Float(count)
+            )
+
+            let superpixel = Superpixel(
+                id: labelInt,
+                labColor: avgColor,
+                pixelCount: count,
+                centerPosition: avgPosition
+            )
+            superpixels.append(superpixel)
+        }
+
+        print("Extracted \(superpixels.count) superpixels from \(width)x\(height) image (Metal GPU)")
 
         return SuperpixelData(
             superpixels: superpixels,

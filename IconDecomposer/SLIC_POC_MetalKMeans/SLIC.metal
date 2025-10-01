@@ -459,3 +459,51 @@ kernel void drawBoundaries(texture2d<float, access::read> originalTexture [[text
 
     outputTexture.write(color, gid);
 }
+
+// MARK: - Superpixel Feature Extraction
+
+/// Parameters for superpixel extraction
+struct SuperpixelExtractionParams {
+    uint imageWidth;
+    uint imageHeight;
+    uint maxLabel;  // Maximum superpixel label value
+};
+
+/// Accumulate superpixel features in parallel
+/// Each pixel thread contributes to its superpixel's accumulators using atomics
+kernel void accumulateSuperpixelFeatures(
+    device const float3* labColors [[buffer(0)]],        // LAB color for each pixel
+    device const uint* labels [[buffer(1)]],             // Superpixel label for each pixel
+    device atomic_float* colorAccumulators [[buffer(2)]], // Flat array: [L0,a0,b0, L1,a1,b1, ...]
+    device atomic_float* positionAccumulators [[buffer(3)]], // Flat array: [x0,y0, x1,y1, ...]
+    device atomic_int* pixelCounts [[buffer(4)]],        // Count of pixels per superpixel
+    constant SuperpixelExtractionParams& params [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    uint totalPixels = params.imageWidth * params.imageHeight;
+    if (gid >= totalPixels) return;
+
+    // Get this pixel's data
+    uint label = labels[gid];
+    float3 labColor = labColors[gid];
+
+    // Calculate pixel position
+    uint x = gid % params.imageWidth;
+    uint y = gid / params.imageWidth;
+    float2 position = float2(float(x), float(y));
+
+    // Atomically accumulate into this superpixel's slot
+    // Color accumulator: 3 floats per superpixel (L, a, b)
+    uint colorBaseIndex = label * 3;
+    atomic_fetch_add_explicit(&colorAccumulators[colorBaseIndex + 0], labColor.x, memory_order_relaxed);
+    atomic_fetch_add_explicit(&colorAccumulators[colorBaseIndex + 1], labColor.y, memory_order_relaxed);
+    atomic_fetch_add_explicit(&colorAccumulators[colorBaseIndex + 2], labColor.z, memory_order_relaxed);
+
+    // Position accumulator: 2 floats per superpixel (x, y)
+    uint positionBaseIndex = label * 2;
+    atomic_fetch_add_explicit(&positionAccumulators[positionBaseIndex + 0], position.x, memory_order_relaxed);
+    atomic_fetch_add_explicit(&positionAccumulators[positionBaseIndex + 1], position.y, memory_order_relaxed);
+
+    // Pixel count: 1 int per superpixel
+    atomic_fetch_add_explicit(&pixelCounts[label], 1, memory_order_relaxed);
+}

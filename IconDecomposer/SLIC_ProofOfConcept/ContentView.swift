@@ -41,9 +41,13 @@ struct ContentView: View {
     @State private var selectedImageIndex = 0
     @State private var originalImage: NSImage?
     @State private var segmentedImage: NSImage?
+    @State private var kmeansImage: NSImage?
     @State private var processingTime: Double = 0
+    @State private var kmeansProcessingTime: Double = 0
     @State private var isProcessing = false
     @State private var errorMessage: String?
+    @State private var lastProcessingResult: SLICProcessor.ProcessingResult?
+    @State private var layerImages: [NSImage] = []
 
     // Test image names (will be added to Assets.xcassets)
     let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4"]
@@ -54,12 +58,17 @@ struct ContentView: View {
     @State private var iterations: Double = 10
     @State private var enforceConnectivity = true
 
+    // K-means parameters
+    @State private var nClusters: Double = 5
+    @State private var useWeightedColors = true
+
     private let processor = SLICProcessor()
 
     var body: some View {
-        VStack(spacing: 20) {
-            // Title and controls
-            VStack(spacing: 15) {
+        ScrollView {
+            VStack(spacing: 20) {
+                // Title and controls
+                VStack(spacing: 15) {
                 VStack(spacing: 10) {
                     Text("SLIC Superpixel Segmentation")
                         .font(.largeTitle)
@@ -103,6 +112,18 @@ struct ContentView: View {
 
                     Toggle("Enforce Connectivity", isOn: $enforceConnectivity)
                         .frame(maxWidth: 300)
+
+                    Divider()
+
+                    // K-means parameters
+                    HStack {
+                        Text("Clusters: \(Int(nClusters))")
+                            .frame(width: 150, alignment: .leading)
+                        Slider(value: $nClusters, in: 2...10, step: 1)
+                    }
+
+                    Toggle("Use Weighted Colors", isOn: $useWeightedColors)
+                        .frame(maxWidth: 300)
                 }
                 .frame(maxWidth: 600)
 
@@ -122,9 +143,18 @@ struct ContentView: View {
 
                 // Performance metrics - always rendered to reserve space
                 VStack(spacing: 5) {
-                    Text("Processing Time: \(String(format: "%.3f", processingTime)) seconds")
+                    let totalTime = processingTime + kmeansProcessingTime
+                    Text("Processing Time: \(String(format: "%.3f", totalTime)) seconds")
                         .font(.headline)
-                    let fps = Int(processingTime > 0.0 ? 1.0/processingTime : 0.0)
+                    HStack {
+                        Text("SLIC: \(String(format: "%.0f", processingTime * 1000))ms")
+                            .font(.caption)
+                        Text("•")
+                            .foregroundColor(.secondary)
+                        Text("K-means: \(String(format: "%.0f", kmeansProcessingTime * 1000))ms")
+                            .font(.caption)
+                    }
+                    let fps = Int(totalTime > 0.0 ? 1.0/totalTime : 0.0)
                     Text("FPS Equivalent: \(fps)")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
@@ -145,80 +175,110 @@ struct ContentView: View {
             Divider()
 
             // Image display
-            HStack(spacing: 20) {
-                VStack {
-                    Text("Original")
-                        .font(.headline)
-                    if let original = originalImage {
-                        Image(nsImage: original)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .background(CheckerboardBackground())
-                            .frame(maxWidth: 512, maxHeight: 512)
-                            .border(Color.gray.opacity(0.3), width: 1)
-                    } else {
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.1))
-                            .aspectRatio(1.0, contentMode: .fit)
-                            .frame(maxWidth: 512, maxHeight: 512)
-                            .overlay(
-                                Text("No image loaded")
-                                    .foregroundColor(.gray)
-                            )
+            ScrollView(.horizontal) {
+                HStack(spacing: 20) {
+                    // Original Image
+                    VStack {
+                        Text("Original")
+                            .font(.headline)
+                        if let original = originalImage {
+                            Image(nsImage: original)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .background(CheckerboardBackground())
+                                .frame(width: 256, height: 256)
+                                .border(Color.gray.opacity(0.3), width: 1)
+                        } else {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.1))
+                                .frame(width: 256, height: 256)
+                                .overlay(
+                                    Text("No image loaded")
+                                        .foregroundColor(.gray)
+                                )
+                        }
                     }
-                }
 
-                VStack {
-                    Text("Segmented (Boundaries)")
-                        .font(.headline)
-                    if let segmented = segmentedImage {
-                        GeometryReader { geometry in
+                    // SLIC Segmentation
+                    VStack {
+                        Text("SLIC Boundaries")
+                            .font(.headline)
+                        if let segmented = segmentedImage {
                             Image(nsImage: segmented)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
                                 .background(CheckerboardBackground())
-                                .frame(width: min(512, geometry.size.width),
-                                       height: min(512, geometry.size.height))
+                                .frame(width: 256, height: 256)
+                                .border(Color.gray.opacity(0.3), width: 1)
+                        } else {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.1))
+                                .frame(width: 256, height: 256)
+                                .overlay(
+                                    Text("Process to see SLIC")
+                                        .foregroundColor(.gray)
+                                )
                         }
-                        .frame(maxWidth: 512, maxHeight: 512)
-                        .border(Color.gray.opacity(0.3), width: 1)
-                    } else if let original = originalImage {
-                        // Use original image with opacity 0 to maintain exact size
-                        Image(nsImage: original)
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .opacity(0)
-                            .background(CheckerboardBackground())
-                            .overlay(
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.1))
-                                    .overlay(
-                                        Text("Process an image to see results")
-                                            .foregroundColor(.gray)
-                                    )
-                            )
-                            .frame(maxWidth: 512, maxHeight: 512)
-                            .border(Color.gray.opacity(0.3), width: 1)
-                    } else {
-                        // No original image loaded
-                        Rectangle()
-                            .fill(Color.gray.opacity(0.1))
-                            .aspectRatio(1.0, contentMode: .fit)
-                            .frame(maxWidth: 512, maxHeight: 512)
-                            .overlay(
-                                Text("Process an image to see results")
-                                    .foregroundColor(.gray)
-                            )
-                            .border(Color.gray.opacity(0.3), width: 1)
+                    }
+
+                    // K-means Clustering
+                    VStack {
+                        Text("K-means Clusters")
+                            .font(.headline)
+                        if let kmeans = kmeansImage {
+                            Image(nsImage: kmeans)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .background(CheckerboardBackground())
+                                .frame(width: 256, height: 256)
+                                .border(Color.gray.opacity(0.3), width: 1)
+                        } else {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.1))
+                                .frame(width: 256, height: 256)
+                                .overlay(
+                                    Text("Process to see clusters")
+                                        .foregroundColor(.gray)
+                                )
+                        }
                     }
                 }
+                .padding()
             }
-            .padding()
+
+            // Layer view section
+            if !layerImages.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Extracted Layers (\(layerImages.count))")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    // Use LazyVGrid for wrapping layout
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 256))], spacing: 15) {
+                        ForEach(Array(layerImages.enumerated()), id: \.offset) { index, layerImage in
+                            VStack {
+                                Text("Layer \(index + 1)")
+                                    .font(.caption)
+                                Image(nsImage: layerImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .background(CheckerboardBackground())
+                                    .frame(width: 256, height: 256)
+                                    .border(Color.gray.opacity(0.3), width: 1)
+                            }
+                        }
+                    }
+                    .padding()
+                }
+            }
 
             Spacer()
         }
         .padding()
-        .frame(minWidth: 800, minHeight: 600)
+    }
+    .frame(minWidth: 900, minHeight: 800)
         .onAppear {
             loadSelectedImage()
         }
@@ -227,7 +287,11 @@ struct ContentView: View {
     private func loadSelectedImage() {
         errorMessage = nil
         segmentedImage = nil
+        kmeansImage = nil
+        layerImages = []
         processingTime = 0
+        kmeansProcessingTime = 0
+        lastProcessingResult = nil
 
         let imageName = testImageNames[selectedImageIndex]
 
@@ -287,12 +351,77 @@ struct ContentView: View {
 
         DispatchQueue.global(qos: .userInitiated).async {
             if let result = processor.processImage(image, parameters: parameters) {
+                // Process with K-means if buffers are available
+                var kmeansNSImage: NSImage?
+                var kmeansTime: Double = 0
+                var layers: [NSImage] = []
+
+                if let labBuffer = result.labBuffer,
+                   let labelsBuffer = result.labelsBuffer {
+
+                    let kmeansStartTime = CFAbsoluteTimeGetCurrent()
+
+                    // Extract superpixels
+                    let superpixelData = SuperpixelProcessor.extractSuperpixels(
+                        from: labBuffer,
+                        labelsBuffer: labelsBuffer,
+                        width: result.width,
+                        height: result.height
+                    )
+
+                    // Perform K-means clustering
+                    let kmeansParams = KMeansProcessor.Parameters(
+                        numberOfClusters: Int(self.nClusters),
+                        useWeightedColors: self.useWeightedColors
+                    )
+
+                    let clusterResult = KMeansProcessor.cluster(
+                        superpixelData: superpixelData,
+                        parameters: kmeansParams
+                    )
+
+                    // Map clusters back to pixels
+                    let pixelClusters = SuperpixelProcessor.mapClustersToPixels(
+                        clusterAssignments: clusterResult.clusterAssignments,
+                        superpixelData: superpixelData
+                    )
+
+                    // Create visualization
+                    let pixelData = KMeansProcessor.visualizeClusters(
+                        pixelClusters: pixelClusters,
+                        clusterCenters: clusterResult.clusterCenters,
+                        width: result.width,
+                        height: result.height
+                    )
+
+                    // Convert to NSImage
+                    if let cgImage = self.createCGImage(from: pixelData, width: result.width, height: result.height) {
+                        kmeansNSImage = NSImage(cgImage: cgImage, size: NSSize(width: result.width, height: result.height))
+                    }
+
+                    // Extract layers from clustering results
+                    if let originalImage = self.originalImage {
+                        let extractedLayers = LayerExtractor.extractLayers(
+                            from: originalImage,
+                            pixelClusters: pixelClusters,
+                            clusterCenters: clusterResult.clusterCenters,
+                            width: result.width,
+                            height: result.height
+                        )
+                        layers = extractedLayers.map { $0.image }
+                    }
+
+                    kmeansTime = CFAbsoluteTimeGetCurrent() - kmeansStartTime
+                }
+
                 DispatchQueue.main.async {
                     print("Processing succeeded")
-                    print("Segmented image size: \(result.1.size)")
-                    print("Segmented image isValid: \(result.1.isValid)")
-                    self.segmentedImage = result.1  // result.segmented is the second element in tuple
-                    self.processingTime = result.2   // result.processingTime is the third element
+                    self.segmentedImage = result.segmented
+                    self.kmeansImage = kmeansNSImage
+                    self.layerImages = layers
+                    self.processingTime = result.processingTime
+                    self.kmeansProcessingTime = kmeansTime
+                    self.lastProcessingResult = result
                     self.isProcessing = false
                 }
             } else {
@@ -303,6 +432,30 @@ struct ContentView: View {
                 }
             }
         }
+    }
+
+    private func createCGImage(from pixelData: Data, width: Int, height: Int) -> CGImage? {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        // BGRA format to match SLIC processor
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+
+        guard let dataProvider = CGDataProvider(data: pixelData as CFData) else {
+            return nil
+        }
+
+        return CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo(rawValue: bitmapInfo),
+            provider: dataProvider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
     }
 }
 

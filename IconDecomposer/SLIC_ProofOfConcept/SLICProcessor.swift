@@ -88,7 +88,18 @@ class SLICProcessor {
         return try device.makeComputePipelineState(function: function)
     }
     
-    func processImage(_ nsImage: NSImage, parameters: Parameters) -> (original: NSImage, segmented: NSImage, processingTime: Double)? {
+    /// Result containing processed image and raw buffer data
+    struct ProcessingResult {
+        let original: NSImage
+        let segmented: NSImage
+        let processingTime: Double
+        let labBuffer: MTLBuffer?
+        let labelsBuffer: MTLBuffer?
+        let width: Int
+        let height: Int
+    }
+
+    func processImage(_ nsImage: NSImage, parameters: Parameters) -> ProcessingResult? {
         // Validate parameters
         guard parameters.nSegments > 0 else {
             print("Invalid parameters: nSegments must be greater than 0")
@@ -425,8 +436,16 @@ class SLICProcessor {
         }
         print("")
         #endif
-        
-        return (nsImage, segmentedImage, processingTime)
+
+        return ProcessingResult(
+            original: nsImage,
+            segmented: segmentedImage,
+            processingTime: processingTime,
+            labBuffer: labBuffer,
+            labelsBuffer: labelsBuffer,
+            width: width,
+            height: height
+        )
     }
     
     private func loadImageIntoTexture(cgImage: CGImage, texture: MTLTexture) {

@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		494EDE3D2E8CE8B900BD48FF /* SwiftKMeansPlusPlus in Frameworks */ = {isa = PBXBuildFile; productRef = 494EDE3C2E8CE8B900BD48FF /* SwiftKMeansPlusPlus */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		494495862E8A08D10061A59E /* IconDecomposer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IconDecomposer.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		494495982E8A08F80061A59E /* SLIC_ProofOfConcept.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SLIC_ProofOfConcept.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -36,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				494EDE3D2E8CE8B900BD48FF /* SwiftKMeansPlusPlus in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -102,6 +107,7 @@
 			);
 			name = SLIC_ProofOfConcept;
 			packageProductDependencies = (
+				494EDE3C2E8CE8B900BD48FF /* SwiftKMeansPlusPlus */,
 			);
 			productName = SLIC_ProofOfConcept;
 			productReference = 494495982E8A08F80061A59E /* SLIC_ProofOfConcept.app */;
@@ -134,6 +140,9 @@
 			);
 			mainGroup = 4944957D2E8A08D10061A59E;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 494495872E8A08D10061A59E /* Products */;
 			projectDirPath = "";
@@ -459,6 +468,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "git@github.com:daprice/SwiftKMeansPlusPlus.git";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		494EDE3C2E8CE8B900BD48FF /* SwiftKMeansPlusPlus */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */;
+			productName = SwiftKMeansPlusPlus;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 4944957E2E8A08D10061A59E /* Project object */;
 }

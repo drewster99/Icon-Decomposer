@@ -26,7 +26,12 @@ class SuperpixelProcessor {
     private static let commandQueue = device.makeCommandQueue()!
     private static let library = device.makeDefaultLibrary()!
 
-    // Lazy-loaded pipeline state
+    // Lazy-loaded pipeline states
+    private static var findMaxLabelPipeline: MTLComputePipelineState = {
+        let function = library.makeFunction(name: "findMaxLabel")!
+        return try! device.makeComputePipelineState(function: function)
+    }()
+
     private static var accumulateSuperpixelFeaturesPipeline: MTLComputePipelineState = {
         let function = library.makeFunction(name: "accumulateSuperpixelFeatures")!
         return try! device.makeComputePipelineState(function: function)
@@ -149,22 +154,29 @@ class SuperpixelProcessor {
 
         let pixelCount = width * height
 
-        // First, find unique labels and max label (need to do on CPU)
+        // Find max label (CPU for now - TODO: GPU optimize)
+        #if DEBUG
+        let findMaxStart = CFAbsoluteTimeGetCurrent()
+        #endif
+
         let labelsPointer = labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: pixelCount)
-        var labelMap = Array<UInt32>(repeating: 0, count: pixelCount)
         var maxLabel: UInt32 = 0
-
         for i in 0..<pixelCount {
-            let label = labelsPointer[i]
-            labelMap[i] = label
-            maxLabel = max(maxLabel, label)
+            maxLabel = max(maxLabel, labelsPointer[i])
         }
-
-        let uniqueLabels = Set(labelMap)
         let numSuperpixels = Int(maxLabel) + 1  // Labels are 0-indexed
+
+        #if DEBUG
+        let findMaxTime = CFAbsoluteTimeGetCurrent() - findMaxStart
+        print(String(format: "  Find maxLabel (CPU): %.2f ms", findMaxTime * 1000))
+        #endif
 
         // Create Metal buffers for accumulation
         // Use maxLabel+1 as array size to handle sparse labels
+        #if DEBUG
+        let buffersStart = CFAbsoluteTimeGetCurrent()
+        #endif
+
         let colorAccumulatorsBuffer = device.makeBuffer(
             length: MemoryLayout<Float>.size * numSuperpixels * 3,
             options: .storageModeShared
@@ -185,6 +197,11 @@ class SuperpixelProcessor {
         memset(positionAccumulatorsBuffer.contents(), 0, positionAccumulatorsBuffer.length)
         memset(pixelCountsBuffer.contents(), 0, pixelCountsBuffer.length)
 
+        #if DEBUG
+        let buffersTime = CFAbsoluteTimeGetCurrent() - buffersStart
+        print(String(format: "  Create/zero buffers: %.2f ms", buffersTime * 1000))
+        #endif
+
         // Create parameter struct
         var params = SuperpixelExtractionParams(
             imageWidth: UInt32(width),
@@ -193,6 +210,10 @@ class SuperpixelProcessor {
         )
 
         // Dispatch Metal kernel
+        #if DEBUG
+        let gpuAccumulateStart = CFAbsoluteTimeGetCurrent()
+        #endif
+
         let commandBuffer = commandQueue.makeCommandBuffer()!
         let encoder = commandBuffer.makeComputeCommandEncoder()!
 
@@ -204,30 +225,42 @@ class SuperpixelProcessor {
         encoder.setBuffer(pixelCountsBuffer, offset: 0, index: 4)
         encoder.setBytes(&params, length: MemoryLayout<SuperpixelExtractionParams>.size, index: 5)
 
-        let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
-        let threadgroupsPerGrid = MTLSize(
+        let accumulateThreadsPerGroup = MTLSize(width: 256, height: 1, depth: 1)
+        let accumulateGroupsPerGrid = MTLSize(
             width: (pixelCount + 255) / 256,
             height: 1,
             depth: 1
         )
-        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        encoder.dispatchThreadgroups(accumulateGroupsPerGrid, threadsPerThreadgroup: accumulateThreadsPerGroup)
 
         encoder.endEncoding()
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
 
+        #if DEBUG
+        let gpuAccumulateTime = CFAbsoluteTimeGetCurrent() - gpuAccumulateStart
+        print(String(format: "  GPU accumulate: %.2f ms", gpuAccumulateTime * 1000))
+        #endif
+
         // Read back results and create Superpixel objects
+        #if DEBUG
+        let readbackStart = CFAbsoluteTimeGetCurrent()
+        #endif
+
         let colorAccumulators = colorAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 3)
         let positionAccumulators = positionAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 2)
         let pixelCounts = pixelCountsBuffer.contents().bindMemory(to: Int32.self, capacity: numSuperpixels)
 
         var superpixels: [Superpixel] = []
+        var uniqueLabels = Set<UInt32>()
 
-        for label in uniqueLabels.sorted() {
-            let labelInt = Int(label)
+        // Build uniqueLabels by scanning pixelCounts array (avoids full labelMap scan)
+        for labelInt in 0..<numSuperpixels {
             let count = Int(pixelCounts[labelInt])
 
             guard count > 0 else { continue }
+
+            uniqueLabels.insert(UInt32(labelInt))
 
             // Calculate averages
             let colorBaseIndex = labelInt * 3
@@ -252,7 +285,25 @@ class SuperpixelProcessor {
             superpixels.append(superpixel)
         }
 
+        #if DEBUG
+        let readbackTime = CFAbsoluteTimeGetCurrent() - readbackStart
+        print(String(format: "  Create Superpixel objects: %.2f ms", readbackTime * 1000))
+        #endif
+
         print("Extracted \(superpixels.count) superpixels from \(width)x\(height) image (Metal GPU)")
+
+        // Build labelMap from buffer (only done once at the end)
+        // Reuse labelsPointer from above
+        #if DEBUG
+        let labelMapStart = CFAbsoluteTimeGetCurrent()
+        #endif
+
+        let labelMap = Array(UnsafeBufferPointer(start: labelsPointer, count: pixelCount))
+
+        #if DEBUG
+        let labelMapTime = CFAbsoluteTimeGetCurrent() - labelMapStart
+        print(String(format: "  Build labelMap: %.2f ms", labelMapTime * 1000))
+        #endif
 
         return SuperpixelData(
             superpixels: superpixels,

@@ -362,14 +362,20 @@ struct ContentView: View {
                     let kmeansStartTime = CFAbsoluteTimeGetCurrent()
 
                     // Extract superpixels
+                    let extractStart = CFAbsoluteTimeGetCurrent()
                     let superpixelData = SuperpixelProcessor.extractSuperpixels(
                         from: labBuffer,
                         labelsBuffer: labelsBuffer,
                         width: result.width,
                         height: result.height
                     )
+                    let extractTime = CFAbsoluteTimeGetCurrent() - extractStart
+                    #if DEBUG
+                    print(String(format: "Extract superpixels: %.2f ms", extractTime * 1000))
+                    #endif
 
                     // Perform K-means clustering
+                    let clusterStart = CFAbsoluteTimeGetCurrent()
                     let kmeansParams = KMeansProcessor.Parameters(
                         numberOfClusters: Int(self.nClusters),
                         useWeightedColors: self.useWeightedColors
@@ -379,27 +385,47 @@ struct ContentView: View {
                         superpixelData: superpixelData,
                         parameters: kmeansParams
                     )
+                    let clusterTime = CFAbsoluteTimeGetCurrent() - clusterStart
+                    #if DEBUG
+                    print(String(format: "K-means clustering: %.2f ms", clusterTime * 1000))
+                    #endif
 
                     // Map clusters back to pixels
+                    let mapStart = CFAbsoluteTimeGetCurrent()
                     let pixelClusters = SuperpixelProcessor.mapClustersToPixels(
                         clusterAssignments: clusterResult.clusterAssignments,
                         superpixelData: superpixelData
                     )
+                    let mapTime = CFAbsoluteTimeGetCurrent() - mapStart
+                    #if DEBUG
+                    print(String(format: "Map clusters to pixels: %.2f ms", mapTime * 1000))
+                    #endif
 
                     // Create visualization
+                    let vizStart = CFAbsoluteTimeGetCurrent()
                     let pixelData = KMeansProcessor.visualizeClusters(
                         pixelClusters: pixelClusters,
                         clusterCenters: clusterResult.clusterCenters,
                         width: result.width,
                         height: result.height
                     )
+                    let vizTime = CFAbsoluteTimeGetCurrent() - vizStart
+                    #if DEBUG
+                    print(String(format: "Create visualization: %.2f ms", vizTime * 1000))
+                    #endif
 
                     // Convert to NSImage
+                    let convertStart = CFAbsoluteTimeGetCurrent()
                     if let cgImage = self.createCGImage(from: pixelData, width: result.width, height: result.height) {
                         kmeansNSImage = NSImage(cgImage: cgImage, size: NSSize(width: result.width, height: result.height))
                     }
+                    let convertTime = CFAbsoluteTimeGetCurrent() - convertStart
+                    #if DEBUG
+                    print(String(format: "Convert to NSImage: %.2f ms", convertTime * 1000))
+                    #endif
 
                     // Extract layers from clustering results
+                    let layerStart = CFAbsoluteTimeGetCurrent()
                     if let originalImage = self.originalImage {
                         let extractedLayers = LayerExtractor.extractLayers(
                             from: originalImage,
@@ -410,8 +436,15 @@ struct ContentView: View {
                         )
                         layers = extractedLayers.map { $0.image }
                     }
+                    let layerTime = CFAbsoluteTimeGetCurrent() - layerStart
+                    #if DEBUG
+                    print(String(format: "Extract layers: %.2f ms", layerTime * 1000))
+                    #endif
 
                     kmeansTime = CFAbsoluteTimeGetCurrent() - kmeansStartTime
+                    #if DEBUG
+                    print(String(format: "Total K-means pipeline: %.2f ms", kmeansTime * 1000))
+                    #endif
                 }
 
                 DispatchQueue.main.async {

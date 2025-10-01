@@ -113,11 +113,16 @@ class KMeansProcessor {
         }
 
         // Initialize centers using KMeans++
+        let kmeansppStartTime = CFAbsoluteTimeGetCurrent()
         let initialCenters = initializeKMeansPlusPlus(
             colors: colorsBuffer,
             numPoints: numPoints,
             numClusters: numClusters
         )
+        let kmeansppTime = CFAbsoluteTimeGetCurrent() - kmeansppStartTime
+        #if DEBUG
+        print(String(format: "K-means++ initialization: %.2f ms", kmeansppTime * 1000))
+        #endif
 
         // Create buffers for main iteration
         var centersBuffer = device.makeBuffer(
@@ -165,6 +170,7 @@ class KMeansProcessor {
         // Main K-means iteration
         var converged = false
         var iterations = 0
+        let iterationLoopStartTime = CFAbsoluteTimeGetCurrent()
 
         while iterations < parameters.maxIterations && !converged {
 
@@ -230,17 +236,21 @@ class KMeansProcessor {
             newCentersBuffer = temp
 
             iterations += 1
-
-            // Only log final iteration or if debugging
-            // if iterations <= 5 || iterations % 10 == 0 || converged {
-            //     let iterTime = CFAbsoluteTimeGetCurrent() - iterStartTime
-            //     var message = "  Iteration \(String(format: "%3d", iterations)): delta: \(String(format: "%.6f", totalDelta))"
-            //     if !emptyClusters.isEmpty {
-            //         message += " [\(emptyClusters.count) empty]"
-            //     }
-            //     print(message)
-            // }
         }
+
+        let iterationLoopTime = CFAbsoluteTimeGetCurrent() - iterationLoopStartTime
+        #if DEBUG
+        print(String(format: "Main iteration loop (%d iterations): %.2f ms", iterations, iterationLoopTime * 1000))
+        #endif
+
+        // In Release builds, ensure all GPU work is complete before reading results
+        // In Debug builds, each kernel already waited, so this is redundant but harmless
+        #if !DEBUG
+        // Need to create and wait on a dummy command buffer to ensure previous work is done
+        let finalSyncBuffer = commandQueue.makeCommandBuffer()!
+        finalSyncBuffer.commit()
+        finalSyncBuffer.waitUntilCompleted()
+        #endif
 
         // Extract final results
         let finalAssignments = extractAssignments(buffer: assignmentsBuffer, count: numPoints)
@@ -256,7 +266,9 @@ class KMeansProcessor {
                 weightedCenters: weightedCenters
             )
             let recalcTime = CFAbsoluteTimeGetCurrent() - recalcStartTime
-            print(String(format: "Center recalculation time: %.2f ms", recalcTime * 1000))
+            #if DEBUG
+            print(String(format: "Center recalculation: %.2f ms", recalcTime * 1000))
+            #endif
         } else {
             finalCenters = extractCenters(buffer: centersBuffer, count: numClusters)
         }
@@ -412,7 +424,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
 
         return weightedColorsBuffer
     }
@@ -450,7 +464,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
     }
 
     private static func calculateDistanceSquaredProbabilities(
@@ -485,7 +501,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
     }
 
     private static func assignPointsToClusters(
@@ -523,7 +541,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
     }
 
     private static func clearClusterAccumulators(
@@ -556,7 +576,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
     }
 
     private static func accumulateClusterData(
@@ -594,7 +616,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
     }
 
     private static func updateClusterCenters(
@@ -633,7 +657,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
     }
 
     private static func checkConvergence(
@@ -666,7 +692,9 @@ class KMeansProcessor {
 
         encoder.endEncoding()
         commandBuffer.commit()
+        #if DEBUG
         commandBuffer.waitUntilCompleted()
+        #endif
     }
 
     // MARK: - Helper Functions

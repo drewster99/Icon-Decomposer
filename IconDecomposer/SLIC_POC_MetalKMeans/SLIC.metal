@@ -469,7 +469,8 @@ struct SuperpixelExtractionParams {
     uint maxLabel;  // Maximum superpixel label value
 };
 
-/// Find maximum label value using parallel reduction
+/// Find maximum label value using parallel atomic updates
+/// Simple direct approach - each thread updates global max atomically
 kernel void findMaxLabel(
     device const uint* labels [[buffer(0)]],           // Superpixel label for each pixel
     device atomic_uint* maxLabelOut [[buffer(1)]],     // Output: maximum label found
@@ -479,23 +480,17 @@ kernel void findMaxLabel(
     if (gid >= totalPixels) return;
 
     uint label = labels[gid];
+    if (label == 0) return;
 
-    // Simple atomic max using compare-and-swap
-    // Load current max
-    uint currentMax = atomic_load_explicit(maxLabelOut, memory_order_relaxed);
-
-    // Keep trying to update if our label is larger
-    while (label > currentMax) {
-        // Try to swap: if maxLabelOut still equals currentMax, set it to label
-        uint expected = currentMax;
-        if (atomic_compare_exchange_weak_explicit(maxLabelOut, &expected, label,
-                                                   memory_order_relaxed,
-                                                   memory_order_relaxed)) {
-            // Successfully updated
-            break;
+    // Atomically update global max using CAS loop
+    uint oldMax = atomic_load_explicit(maxLabelOut, memory_order_relaxed);
+    while (label > oldMax) {
+        if (atomic_compare_exchange_weak_explicit(maxLabelOut, &oldMax, label,
+                                                  memory_order_relaxed,
+                                                  memory_order_relaxed)) {
+            break; // Successfully updated
         }
-        // Failed - another thread updated it. expected now holds the new value.
-        currentMax = expected;
+        // oldMax now holds the latest value, loop continues if label > oldMax
     }
 }
 

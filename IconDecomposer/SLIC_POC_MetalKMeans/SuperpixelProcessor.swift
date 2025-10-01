@@ -154,7 +154,7 @@ class SuperpixelProcessor {
 
         let pixelCount = width * height
 
-        // Find max label (CPU for now - TODO: GPU optimize)
+        // Find max label (CPU scan - GPU version has atomic contention issues)
         #if DEBUG
         let findMaxStart = CFAbsoluteTimeGetCurrent()
         #endif

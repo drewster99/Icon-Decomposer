@@ -13,7 +13,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "mcp__xcode-mcp-server__get_project_schemes",
-      "mcp__xcode-mcp-server__get_build_errors"
+      "mcp__xcode-mcp-server__get_build_errors",
+      "WebFetch(domain:stats.stackexchange.com)",
+      "Bash(git log:*)"
     ],
     "deny": [],
     "ask": []

@@ -90,9 +90,18 @@ class LayerExtractor {
         var layers: [Layer] = []
 
         for (clusterId, pixelCount) in sortedClusters {
+            #if DEBUG
+            let layerStart = CFAbsoluteTimeGetCurrent()
+            #endif
+
             // Create mask and layer image for this cluster
             var maskData = Data(count: width * height)
             var layerData = Data(count: width * height * 4)
+
+            #if DEBUG
+            let allocTime = CFAbsoluteTimeGetCurrent() - layerStart
+            let loopStart = CFAbsoluteTimeGetCurrent()
+            #endif
 
             maskData.withUnsafeMutableBytes { maskBytes in
                 layerData.withUnsafeMutableBytes { layerBytes in
@@ -133,11 +142,26 @@ class LayerExtractor {
                 }
             }
 
+            #if DEBUG
+            let loopTime = CFAbsoluteTimeGetCurrent() - loopStart
+            #endif
+
             // Create NSImage from layer data
+            #if DEBUG
+            let imageStart = CFAbsoluteTimeGetCurrent()
+            #endif
+
             guard let layerImage = createNSImage(from: layerData, width: width, height: height) else {
                 print("Failed to create NSImage for cluster \(clusterId)")
                 continue
             }
+
+            #if DEBUG
+            let imageTime = CFAbsoluteTimeGetCurrent() - imageStart
+            let totalLayerTime = CFAbsoluteTimeGetCurrent() - layerStart
+            print(String(format: "  Cluster %d layer: alloc=%.2fms, loop=%.2fms, image=%.2fms, total=%.2fms",
+                         clusterId, allocTime * 1000, loopTime * 1000, imageTime * 1000, totalLayerTime * 1000))
+            #endif
 
             // Get average color for this cluster
             let averageColor = clusterId < clusterCenters.count ?

@@ -8,8 +8,20 @@
 import Foundation
 import CoreGraphics
 import AppKit
+import Metal
 
 class LayerExtractor {
+
+    // Metal objects for GPU acceleration
+    private static let device = MTLCreateSystemDefaultDevice()!
+    private static let commandQueue = device.makeCommandQueue()!
+    private static let library = device.makeDefaultLibrary()!
+
+    // Lazy-loaded pipeline state
+    private static var extractLayerPipeline: MTLComputePipelineState = {
+        let function = library.makeFunction(name: "extractLayer")!
+        return try! device.makeComputePipelineState(function: function)
+    }()
 
     /// Result containing an individual layer
     struct Layer {
@@ -103,44 +115,16 @@ class LayerExtractor {
             let loopStart = CFAbsoluteTimeGetCurrent()
             #endif
 
-            maskData.withUnsafeMutableBytes { maskBytes in
-                layerData.withUnsafeMutableBytes { layerBytes in
-                    let mask = maskBytes.bindMemory(to: UInt8.self)
-                    let layer = layerBytes.bindMemory(to: UInt8.self)
-                    let original = originalData.bindMemory(to: UInt8.self, capacity: width * height * 4)
-
-                    for y in 0..<height {
-                        for x in 0..<width {
-                            let idx = y * width + x
-                            let pixelCluster = Int(pixelClusters[idx])
-
-                            if pixelCluster == clusterId {
-                                // Set mask to 255 (fully opaque)
-                                mask[idx] = 255
-
-                                // Copy original pixel with full alpha
-                                let srcOffset = idx * 4
-                                let dstOffset = idx * 4
-
-                                layer[dstOffset + 0] = original[srcOffset + 0]  // B
-                                layer[dstOffset + 1] = original[srcOffset + 1]  // G
-                                layer[dstOffset + 2] = original[srcOffset + 2]  // R
-                                layer[dstOffset + 3] = original[srcOffset + 3]  // A (preserve original alpha)
-                            } else {
-                                // Set mask to 0 (fully transparent)
-                                mask[idx] = 0
-
-                                // Make pixel transparent
-                                let dstOffset = idx * 4
-                                layer[dstOffset + 0] = 0  // B
-                                layer[dstOffset + 1] = 0  // G
-                                layer[dstOffset + 2] = 0  // R
-                                layer[dstOffset + 3] = 0  // A
-                            }
-                        }
-                    }
-                }
-            }
+            // GPU-accelerated layer extraction
+            extractLayerGPU(
+                originalData: originalData,
+                pixelClusters: pixelClusters,
+                targetCluster: UInt32(clusterId),
+                maskData: &maskData,
+                layerData: &layerData,
+                width: width,
+                height: height
+            )
 
             #if DEBUG
             let loopTime = CFAbsoluteTimeGetCurrent() - loopStart
@@ -180,6 +164,93 @@ class LayerExtractor {
 
         print("Extracted \(layers.count) layers from \(clusterPixelCounts.count) clusters")
         return layers
+    }
+
+    /// GPU-accelerated layer extraction using Metal
+    private static func extractLayerGPU(
+        originalData: UnsafeMutableRawPointer,
+        pixelClusters: [UInt32],
+        targetCluster: UInt32,
+        maskData: inout Data,
+        layerData: inout Data,
+        width: Int,
+        height: Int
+    ) {
+        let pixelCount = width * height
+
+        // Create Metal buffers
+        guard let originalBuffer = device.makeBuffer(
+            bytes: originalData,
+            length: pixelCount * 4,
+            options: .storageModeShared
+        ) else {
+            print("Failed to create original buffer")
+            return
+        }
+
+        guard let clustersBuffer = device.makeBuffer(
+            bytes: pixelClusters,
+            length: pixelCount * MemoryLayout<UInt32>.size,
+            options: .storageModeShared
+        ) else {
+            print("Failed to create clusters buffer")
+            return
+        }
+
+        guard let layerBuffer = device.makeBuffer(
+            length: pixelCount * 4,
+            options: .storageModeShared
+        ) else {
+            print("Failed to create layer buffer")
+            return
+        }
+
+        guard let maskBuffer = device.makeBuffer(
+            length: pixelCount,
+            options: .storageModeShared
+        ) else {
+            print("Failed to create mask buffer")
+            return
+        }
+
+        // Dispatch Metal kernel
+        let commandBuffer = commandQueue.makeCommandBuffer()!
+        let encoder = commandBuffer.makeComputeCommandEncoder()!
+
+        encoder.setComputePipelineState(extractLayerPipeline)
+        encoder.setBuffer(originalBuffer, offset: 0, index: 0)
+        encoder.setBuffer(clustersBuffer, offset: 0, index: 1)
+        encoder.setBuffer(layerBuffer, offset: 0, index: 2)
+        encoder.setBuffer(maskBuffer, offset: 0, index: 3)
+        var target = targetCluster
+        encoder.setBytes(&target, length: MemoryLayout<UInt32>.size, index: 4)
+        var total = UInt32(pixelCount)
+        encoder.setBytes(&total, length: MemoryLayout<UInt32>.size, index: 5)
+
+        let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
+        let threadgroupsPerGrid = MTLSize(
+            width: (pixelCount + 255) / 256,
+            height: 1,
+            depth: 1
+        )
+        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+
+        // Copy results back to Data
+        maskData.withUnsafeMutableBytes { maskBytes in
+            let maskPtr = maskBytes.bindMemory(to: UInt8.self)
+            let bufferMask = maskBuffer.contents().bindMemory(to: UInt8.self, capacity: pixelCount)
+            memcpy(maskPtr.baseAddress!, bufferMask, pixelCount)
+        }
+
+        layerData.withUnsafeMutableBytes { layerBytes in
+            let layerPtr = layerBytes.bindMemory(to: UInt8.self)
+            let bufferLayer = layerBuffer.contents().bindMemory(to: UInt8.self, capacity: pixelCount * 4)
+            memcpy(layerPtr.baseAddress!, bufferLayer, pixelCount * 4)
+        }
     }
 
     /// Create NSImage from pixel data

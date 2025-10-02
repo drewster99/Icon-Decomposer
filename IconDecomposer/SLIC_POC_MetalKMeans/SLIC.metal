@@ -532,3 +532,31 @@ kernel void accumulateSuperpixelFeatures(
     // Pixel count: 1 int per superpixel
     atomic_fetch_add_explicit(&pixelCounts[label], 1, memory_order_relaxed);
 }
+
+// MARK: - Layer Extraction
+
+/// Extract a single layer by filtering pixels based on cluster assignment
+/// Copies pixels from original image that match the target cluster, zeros others
+kernel void extractLayer(
+    device const uchar4* originalPixels [[buffer(0)]],  // Original BGRA image data
+    device const uint* pixelClusters [[buffer(1)]],     // Cluster assignment for each pixel
+    device uchar4* layerPixels [[buffer(2)]],           // Output layer BGRA data
+    device uchar* maskData [[buffer(3)]],               // Output mask (255 or 0)
+    constant uint& targetCluster [[buffer(4)]],         // Which cluster to extract
+    constant uint& totalPixels [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= totalPixels) return;
+
+    uint clusterAssignment = pixelClusters[gid];
+
+    if (clusterAssignment == targetCluster) {
+        // This pixel belongs to target cluster - copy original pixel
+        layerPixels[gid] = originalPixels[gid];
+        maskData[gid] = 255;  // Fully opaque
+    } else {
+        // This pixel doesn't belong - make transparent
+        layerPixels[gid] = uchar4(0, 0, 0, 0);
+        maskData[gid] = 0;  // Fully transparent
+    }
+}

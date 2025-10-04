@@ -29,7 +29,8 @@ kernel void calculateMinDistances(
     float3 point = points[gid];
     float minDist = INFINITY;
 
-    // Find distance to nearest center
+    // Find distance to nearest center - numClusters, in this case, is really the number
+    // of centers we have so far
     for (uint i = 0; i < params.numClusters; i++) {
         float3 center = centers[i];
         float3 diff = point - center;

@@ -14,6 +14,15 @@ import simd
 /// Handles K-means clustering of superpixel features using Metal
 class KMeansProcessor {
 
+    /// Snapshot of K-means state at a particular iteration
+    struct IterationSnapshot {
+        let iterationNumber: Int
+        let clusterAssignments: [Int]
+        let clusterCenters: [SIMD3<Float>]
+        let visualizationImage: NSImage
+        let layerImages: [NSImage]
+    }
+
     /// Result of K-means clustering
     struct ClusteringResult {
         let clusterAssignments: [Int]  // Cluster ID for each superpixel
@@ -21,6 +30,7 @@ class KMeansProcessor {
         let numberOfClusters: Int
         let iterations: Int
         let converged: Bool
+        let iterationSnapshots: [IterationSnapshot]  // Captured iteration history
     }
 
     /// Parameters for K-means clustering
@@ -70,10 +80,16 @@ class KMeansProcessor {
     /// - Parameters:
     ///   - superpixelData: Extracted superpixel features
     ///   - parameters: Clustering parameters
+    ///   - originalImage: Original image for layer extraction in snapshots
+    ///   - imageWidth: Image width
+    ///   - imageHeight: Image height
     /// - Returns: Clustering results
     static func cluster(
         superpixelData: SuperpixelProcessor.SuperpixelData,
-        parameters: Parameters
+        parameters: Parameters,
+        originalImage: NSImage,
+        imageWidth: Int,
+        imageHeight: Int
     ) -> ClusteringResult {
 
         // Extract color features (weighted or unweighted)
@@ -170,6 +186,7 @@ class KMeansProcessor {
         // Main K-means iteration
         var converged = false
         var iterations = 0
+        var iterationSnapshots: [IterationSnapshot] = []
         let iterationLoopStartTime = CFAbsoluteTimeGetCurrent()
 
         while iterations < parameters.maxIterations && !converged {
@@ -236,6 +253,48 @@ class KMeansProcessor {
             newCentersBuffer = temp
 
             iterations += 1
+
+            // Capture snapshot every iteration (or every N iterations to save memory)
+            // For now, capture every iteration
+            let currentAssignments = extractAssignments(buffer: assignmentsBuffer, count: numPoints)
+            let currentCenters = extractCenters(buffer: centersBuffer, count: numClusters)
+
+            // Map to pixels for visualization
+            let pixelClusters = SuperpixelProcessor.mapClustersToPixels(
+                clusterAssignments: currentAssignments,
+                superpixelData: superpixelData
+            )
+
+            // Create visualization
+            let pixelData = visualizeClusters(
+                pixelClusters: pixelClusters,
+                clusterCenters: currentCenters,
+                width: imageWidth,
+                height: imageHeight
+            )
+
+            // Extract layers for this iteration
+            let extractedLayers = LayerExtractor.extractLayers(
+                from: originalImage,
+                pixelClusters: pixelClusters,
+                clusterCenters: currentCenters,
+                width: imageWidth,
+                height: imageHeight
+            )
+            let iterationLayerImages = extractedLayers.map { $0.image }
+
+            // Convert to NSImage
+            if let cgImage = createCGImageFromData(pixelData, width: imageWidth, height: imageHeight) {
+                let nsImage = NSImage(cgImage: cgImage, size: NSSize(width: imageWidth, height: imageHeight))
+                let snapshot = IterationSnapshot(
+                    iterationNumber: iterations,
+                    clusterAssignments: currentAssignments,
+                    clusterCenters: currentCenters,
+                    visualizationImage: nsImage,
+                    layerImages: iterationLayerImages
+                )
+                iterationSnapshots.append(snapshot)
+            }
         }
 
         let iterationLoopTime = CFAbsoluteTimeGetCurrent() - iterationLoopStartTime
@@ -289,7 +348,8 @@ class KMeansProcessor {
             clusterCenters: finalCenters,
             numberOfClusters: numClusters,
             iterations: iterations,
-            converged: converged
+            converged: converged,
+            iterationSnapshots: iterationSnapshots
         )
     }
 
@@ -347,18 +407,24 @@ class KMeansProcessor {
             )!
 
             totalSumBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee = 0
-
+            let totalSumBeforeCall = totalSumBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee
             calculateDistanceSquaredProbabilities(
                 minDistances: minDistancesBuffer,
                 probabilities: probabilitiesBuffer,
                 totalSum: totalSumBuffer,
                 numPoints: numPoints
             )
+            print(">>> 'totalSum' AFTER call to calculateDistanceSquaredProbabilities: \(totalSumBeforeCall)")
 
             // Sample next center based on D² probabilities
             let probabilities = probabilitiesBuffer.contents().bindMemory(to: Float.self, capacity: numPoints)
             let totalSum = totalSumBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee
-
+            // Before sampling, check if probabilities are uniform
+            let avgProb = 1.0 / Float(numPoints)
+            let maxProb = (0..<numPoints).map { probabilities[$0] }.max() ?? 0
+            let minProb = (0..<numPoints).map { probabilities[$0] }.min() ?? 0
+            print(">>> Probability range: min=\(minProb/totalSum), max=\(maxProb/totalSum), avg=\(avgProb)")
+            
             // Build cumulative distribution
             var cumulative: [Float] = []
             var sum: Float = 0
@@ -366,12 +432,15 @@ class KMeansProcessor {
                 sum += probabilities[i]
                 cumulative.append(sum / totalSum)
             }
-
+            let gpuTotalSum = totalSumBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee
+            print("GPU totalSum: \(gpuTotalSum), CPU sum: \(sum), diff: \(abs(gpuTotalSum - sum))")
+            
             // Sample
             let random = Float.random(in: 0..<1)
             var selectedIndex = numPoints - 1
             for i in 0..<numPoints {
                 if cumulative[i] >= random {
+                    print(">>> SAMPLED point i=\(i) from \(numPoints) points: random=\(random), cumulative[i]=\(cumulative[i])")
                     selectedIndex = i
                     break
                 }
@@ -381,6 +450,9 @@ class KMeansProcessor {
             // Reduced logging for multiple runs
         }
 
+        for center in centers {
+            print("*** center: \(center)")
+        }
         return centers
     }
 
@@ -832,6 +904,30 @@ class KMeansProcessor {
             gammaCorrect(r),
             gammaCorrect(g),
             gammaCorrect(b)
+        )
+    }
+
+    /// Create CGImage from pixel data
+    private static func createCGImageFromData(_ pixelData: Data, width: Int, height: Int) -> CGImage? {
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+
+        guard let dataProvider = CGDataProvider(data: pixelData as CFData) else {
+            return nil
+        }
+
+        return CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: colorSpace,
+            bitmapInfo: CGBitmapInfo(rawValue: bitmapInfo),
+            provider: dataProvider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
         )
     }
 }

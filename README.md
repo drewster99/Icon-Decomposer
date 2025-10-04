@@ -23,7 +23,7 @@ A powerful tool for decomposing app icons into separate color layers, perfect fo
 
 1. Start the server:
    ```bash
-   python server.py
+   flask --app server.py run
    ```
 
 2. Open your browser and navigate to:

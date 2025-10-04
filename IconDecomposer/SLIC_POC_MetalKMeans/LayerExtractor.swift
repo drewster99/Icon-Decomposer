@@ -76,11 +76,22 @@ class LayerExtractor {
             return []
         }
 
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
+        context.clear(fullRect)
+        context.draw(cgImage, in: fullRect)
 
         // Find unique cluster IDs and count pixels
+        let transparentLabel: UInt32 = 0xFFFFFFFE
         var clusterPixelCounts: [Int: Int] = [:]
+        var transparentPixelCount = 0
+
         for clusterId in pixelClusters {
+            // Skip transparent pixels
+            if clusterId == transparentLabel {
+                transparentPixelCount += 1
+                continue
+            }
+
             let id = Int(clusterId)
             clusterPixelCounts[id, default: 0] += 1
         }
@@ -90,14 +101,18 @@ class LayerExtractor {
         print("  Cluster centers provided: \(clusterCenters.count)")
         print("  Unique clusters in pixel data: \(clusterPixelCounts.count)")
         print("  Cluster IDs found: \(clusterPixelCounts.keys.sorted())")
+        if transparentPixelCount > 0 {
+            let transparentPercent = Double(transparentPixelCount) / Double(width * height) * 100.0
+            print(String(format: "  Transparent pixels: %d (%.2f%%)", transparentPixelCount, transparentPercent))
+        }
         print("  Pixel counts per cluster:")
         for (clusterId, count) in clusterPixelCounts.sorted(by: { $0.key < $1.key }) {
             let percentage = Double(count) / Double(width * height) * 100.0
             print(String(format: "    Cluster %d: %d pixels (%.2f%%)", clusterId, count, percentage))
         }
 
-        // Sort clusters by size (largest first)
-        let sortedClusters = clusterPixelCounts.sorted { $0.value > $1.value }
+        // Sort clusters by ID (ascending order, matching debug output and cluster center order)
+        let sortedClusters = clusterPixelCounts.sorted { $0.key < $1.key }
 
         var layers: [Layer] = []
 

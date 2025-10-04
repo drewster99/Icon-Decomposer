@@ -175,7 +175,13 @@ class SLICProcessor {
             print("Failed to create LAB buffer")
             return nil
         }
-        
+
+        let alphaBufferSize = width * height * MemoryLayout<Float>.size
+        guard let alphaBuffer = device.makeBuffer(length: alphaBufferSize, options: .storageModeShared) else {
+            print("Failed to create alpha buffer")
+            return nil
+        }
+
         let centersBufferSize = numCenters * MemoryLayout<ClusterCenter>.size
         guard let centersBuffer = device.makeBuffer(length: centersBufferSize, options: .storageModeShared) else {
             print("Failed to create centers buffer")
@@ -246,7 +252,8 @@ class SLICProcessor {
             encoder.setComputePipelineState(rgbToLabPipeline)
             encoder.setTexture(blurredTexture, index: 0)
             encoder.setBuffer(labBuffer, offset: 0, index: 0)
-            
+            encoder.setBuffer(alphaBuffer, offset: 0, index: 1)
+
             let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
             encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -306,7 +313,8 @@ class SLICProcessor {
                 encoder.setBuffer(labelsBuffer, offset: 0, index: 2)
                 encoder.setBuffer(distancesBuffer, offset: 0, index: 3)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 4)
-                
+                encoder.setBuffer(alphaBuffer, offset: 0, index: 5)
+
                 let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
                 encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -461,7 +469,7 @@ class SLICProcessor {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         // Use BGRA format to match our texture format
         let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        
+
         guard let context = CGContext(data: data,
                                       width: width,
                                       height: height,
@@ -476,7 +484,9 @@ class SLICProcessor {
         let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
         // Clear the whole rect because `UnsafeMutableRawPointer.allocate` (for `data`, above)
         // returns uninitialized memory.
-        context.clear(fullRect)
+//        context.clear(fullRect)
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(fullRect)
         context.draw(cgImage, in: fullRect)
         
         // Load directly into texture - no conversion needed!
@@ -504,7 +514,7 @@ class SLICProcessor {
         let colorSpace = CGColorSpaceCreateDeviceRGB()
         // Match the BGRA format we're using
         let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-        
+
         guard let dataProvider = CGDataProvider(dataInfo: nil,
                                                 data: data,
                                                 size: height * bytesPerRow,

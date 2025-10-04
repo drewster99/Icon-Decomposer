@@ -8,6 +8,11 @@
 #include <metal_stdlib>
 using namespace metal;
 
+// Constants
+// TODO: Will probably remove alpha thresholding entirely
+//constant uint TRANSPARENT_LABEL = 0xFFFFFFFE;  // Special label for transparent pixels
+//constant float ALPHA_THRESHOLD = 100.0 / 255.0;  // Pixels below this alpha are considered transparent (edge/anti-aliasing pixels)
+
 // Structure to hold SLIC parameters
 struct SLICParams {
     uint imageWidth;
@@ -95,6 +100,7 @@ kernel void gaussianBlur(texture2d<float, access::read> inTexture [[texture(0)]]
 // RGB to LAB color space conversion
 kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
                      device float3* labBuffer [[buffer(0)]],
+                     device float* alphaBuffer [[buffer(1)]],
                      uint2 gid [[thread_position_in_grid]]) {
 
     uint width = rgbTexture.get_width();
@@ -153,6 +159,7 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
 
     uint index = gid.y * width + gid.x;
     labBuffer[index] = float3(L, a, b);
+    alphaBuffer[index] = rgba.a;  // Store alpha for transparency filtering
 }
 
 // Initialize cluster centers on a regular grid
@@ -221,6 +228,7 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
                          device atomic_uint* labels [[buffer(2)]],
                          device atomic_float* distances [[buffer(3)]],
                          constant SLICParams& params [[buffer(4)]],
+                         device const float* alphaBuffer [[buffer(5)]],
                          uint2 gid [[thread_position_in_grid]]) {
 
     if (gid.x >= params.imageWidth || gid.y >= params.imageHeight) {
@@ -228,6 +236,17 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
     }
 
     uint pixelIndex = gid.y * params.imageWidth + gid.x;
+
+    // TODO: Alpha thresholding - will probably remove entirely
+//    // Check if pixel is transparent - if so, assign to special trash label
+//    float alpha = alphaBuffer[pixelIndex];
+//    if (alpha < ALPHA_THRESHOLD) {
+//        atomic_store_explicit(&labels[pixelIndex], TRANSPARENT_LABEL, memory_order_relaxed);
+//        device atomic_uint* distanceAtomic = (device atomic_uint*)&distances[pixelIndex];
+//        atomic_store_explicit(distanceAtomic, as_type<uint>(0.0f), memory_order_relaxed);
+//        return;  // Skip normal SLIC assignment
+//    }
+
     float3 pixelLab = labBuffer[pixelIndex];
     float2 pixelPos = float2(gid.x, gid.y);
 

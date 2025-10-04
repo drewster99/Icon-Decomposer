@@ -10,6 +10,7 @@
 import Foundation
 import Metal
 import simd
+import AppKit
 
 /// Parameters for superpixel extraction (matches Metal struct)
 struct SuperpixelExtractionParams {
@@ -160,9 +161,14 @@ class SuperpixelProcessor {
         #endif
 
         let labelsPointer = labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: pixelCount)
+        let transparentLabel: UInt32 = 0xFFFFFFFE
         var maxLabel: UInt32 = 0
         for i in 0..<pixelCount {
-            maxLabel = max(maxLabel, labelsPointer[i])
+            let label = labelsPointer[i]
+            // Skip transparent label when finding max
+            if label != transparentLabel {
+                maxLabel = max(maxLabel, label)
+            }
         }
         let numSuperpixels = Int(maxLabel) + 1  // Labels are 0-indexed
 
@@ -253,12 +259,20 @@ class SuperpixelProcessor {
 
         var superpixels: [Superpixel] = []
         var uniqueLabels = Set<UInt32>()
+        var transparentPixelCount = 0
 
         // Build uniqueLabels by scanning pixelCounts array (avoids full labelMap scan)
         for labelInt in 0..<numSuperpixels {
             let count = Int(pixelCounts[labelInt])
 
             guard count > 0 else { continue }
+
+            // Skip transparent pixels (assigned to special trash label)
+            let transparentLabel: UInt32 = 0xFFFFFFFE
+            if UInt32(labelInt) == transparentLabel {
+                transparentPixelCount = count
+                continue
+            }
 
             uniqueLabels.insert(UInt32(labelInt))
 
@@ -290,7 +304,13 @@ class SuperpixelProcessor {
         print(String(format: "  Create Superpixel objects: %.2f ms", readbackTime * 1000))
         #endif
 
+        let totalPixels = width * height
+        let transparentPercent = Double(transparentPixelCount) / Double(totalPixels) * 100.0
+
         print("Extracted \(superpixels.count) superpixels from \(width)x\(height) image (Metal GPU)")
+        if transparentPixelCount > 0 {
+            print(String(format: "  Excluded %d transparent pixels (%.1f%%) from clustering", transparentPixelCount, transparentPercent))
+        }
 
         // Build labelMap from buffer (only done once at the end)
         // Reuse labelsPointer from above
@@ -366,5 +386,111 @@ class SuperpixelProcessor {
         }
 
         return pixelClusters
+    }
+
+    /// Visualize superpixels by filling each with its average LAB color
+    /// - Parameter superpixelData: Processed superpixel data
+    /// - Returns: NSImage where each superpixel shows its average color
+    static func visualizeSuperpixelAverageColors(superpixelData: SuperpixelData) -> NSImage {
+        let width = superpixelData.imageWidth
+        let height = superpixelData.imageHeight
+
+        // Create mapping from superpixel ID to average LAB color
+        var superpixelColors = [UInt32: SIMD3<Float>]()
+        for superpixel in superpixelData.superpixels {
+            superpixelColors[UInt32(superpixel.id)] = superpixel.labColor
+        }
+
+        // Create pixel data
+        var pixelData = Data(count: width * height * 4)
+
+        pixelData.withUnsafeMutableBytes { bytes in
+            let pixels = bytes.bindMemory(to: UInt8.self)
+
+            for y in 0..<height {
+                for x in 0..<width {
+                    let idx = y * width + x
+                    let superpixelLabel = superpixelData.labelMap[idx]
+
+                    // Get LAB color for this superpixel
+                    guard let labColor = superpixelColors[superpixelLabel] else {
+                        // Fallback to black for unmapped labels
+                        let pixelOffset = idx * 4
+                        pixels[pixelOffset + 0] = 0  // B
+                        pixels[pixelOffset + 1] = 0  // G
+                        pixels[pixelOffset + 2] = 0  // R
+                        pixels[pixelOffset + 3] = 255  // A
+                        continue
+                    }
+
+                    // Convert LAB to RGB
+                    let rgb = labToRGB(labColor)
+
+                    // Write BGRA pixels with byteOrder32Little
+                    let pixelOffset = idx * 4
+                    pixels[pixelOffset + 0] = UInt8(rgb.z * 255)  // B
+                    pixels[pixelOffset + 1] = UInt8(rgb.y * 255)  // G
+                    pixels[pixelOffset + 2] = UInt8(rgb.x * 255)  // R
+                    pixels[pixelOffset + 3] = 255                  // A
+                }
+            }
+        }
+
+        // Convert Data to CGImage
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+
+        guard let dataProvider = CGDataProvider(data: pixelData as CFData),
+              let cgImage = CGImage(
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bitsPerPixel: 32,
+                bytesPerRow: width * 4,
+                space: colorSpace,
+                bitmapInfo: CGBitmapInfo(rawValue: bitmapInfo),
+                provider: dataProvider,
+                decode: nil,
+                shouldInterpolate: false,
+                intent: .defaultIntent
+              ) else {
+            // Return empty image on failure
+            return NSImage(size: NSSize(width: width, height: height))
+        }
+
+        return NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+    }
+
+    /// Convert LAB color to RGB (same as KMeansProcessor)
+    private static func labToRGB(_ lab: SIMD3<Float>) -> SIMD3<Float> {
+        // LAB to XYZ
+        let fy = (lab.x + 16.0) / 116.0
+        let fx = lab.y / 500.0 + fy
+        let fz = fy - lab.z / 200.0
+
+        let xr = fx > 0.206897 ? fx * fx * fx : (fx - 16.0/116.0) / 7.787
+        let yr = fy > 0.206897 ? fy * fy * fy : (fy - 16.0/116.0) / 7.787
+        let zr = fz > 0.206897 ? fz * fz * fz : (fz - 16.0/116.0) / 7.787
+
+        let x = xr * 95.047
+        let y = yr * 100.000
+        let z = zr * 108.883
+
+        // XYZ to RGB (sRGB)
+        let r =  3.2406 * x / 100.0 - 1.5372 * y / 100.0 - 0.4986 * z / 100.0
+        let g = -0.9689 * x / 100.0 + 1.8758 * y / 100.0 + 0.0415 * z / 100.0
+        let b =  0.0557 * x / 100.0 - 0.2040 * y / 100.0 + 1.0570 * z / 100.0
+
+        // Apply gamma correction and clamp
+        let gammaCorrect: (Float) -> Float = { value in
+            let clamped = max(0, min(1, value))
+            return clamped <= 0.0031308 ? 12.92 * clamped : 1.055 * pow(clamped, 1.0/2.4) - 0.055
+        }
+
+        return SIMD3<Float>(
+            gammaCorrect(r),
+            gammaCorrect(g),
+            gammaCorrect(b)
+        )
     }
 }

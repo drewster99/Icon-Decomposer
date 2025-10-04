@@ -37,6 +37,7 @@ class SLICProcessor {
         let compactness: Float
         let iterations: Int
         let enforceConnectivity: Bool
+        let greenAxisScale: Float
     }
     
     init?() {
@@ -253,6 +254,10 @@ class SLICProcessor {
             encoder.setTexture(blurredTexture, index: 0)
             encoder.setBuffer(labBuffer, offset: 0, index: 0)
             encoder.setBuffer(alphaBuffer, offset: 0, index: 1)
+
+            // Pass green axis scale parameter
+            var greenScale = parameters.greenAxisScale
+            encoder.setBytes(&greenScale, length: MemoryLayout<Float>.size, index: 2)
 
             let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)

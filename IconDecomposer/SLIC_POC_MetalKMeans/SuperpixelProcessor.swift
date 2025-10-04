@@ -344,11 +344,11 @@ class SuperpixelProcessor {
     /// Create weighted LAB colors with reduced lightness influence
     /// - Parameters:
     ///   - superpixelData: Processed superpixel data
-    ///   - lightnessWeight: Weight for L channel (default 0.65 like Python)
+    ///   - lightnessWeight: Weight for L channel (default 0.35)
     /// - Returns: Array of weighted LAB colors
     static func extractWeightedColorFeatures(
         from superpixelData: SuperpixelData,
-        lightnessWeight: Float = 0.65
+        lightnessWeight: Float = 0.35
     ) -> [SIMD3<Float>] {
         return superpixelData.superpixels.map { superpixel in
             SIMD3<Float>(
@@ -389,9 +389,11 @@ class SuperpixelProcessor {
     }
 
     /// Visualize superpixels by filling each with its average LAB color
-    /// - Parameter superpixelData: Processed superpixel data
+    /// - Parameters:
+    ///   - superpixelData: Processed superpixel data
+    ///   - greenAxisScale: Scale factor for negative 'a' values (default 2.0)
     /// - Returns: NSImage where each superpixel shows its average color
-    static func visualizeSuperpixelAverageColors(superpixelData: SuperpixelData) -> NSImage {
+    static func visualizeSuperpixelAverageColors(superpixelData: SuperpixelData, greenAxisScale: Float = 2.0) -> NSImage {
         let width = superpixelData.imageWidth
         let height = superpixelData.imageHeight
 
@@ -424,7 +426,7 @@ class SuperpixelProcessor {
                     }
 
                     // Convert LAB to RGB
-                    let rgb = labToRGB(labColor)
+                    let rgb = labToRGB(labColor, greenAxisScale: greenAxisScale)
 
                     // Write BGRA pixels with byteOrder32Little
                     let pixelOffset = idx * 4
@@ -462,10 +464,13 @@ class SuperpixelProcessor {
     }
 
     /// Convert LAB color to RGB (same as KMeansProcessor)
-    private static func labToRGB(_ lab: SIMD3<Float>) -> SIMD3<Float> {
+    private static func labToRGB(_ lab: SIMD3<Float>, greenAxisScale: Float = 2.0) -> SIMD3<Float> {
+        // Reverse green axis scaling if 'a' was scaled during RGB→LAB conversion
+        let a = lab.y < 0 ? lab.y / greenAxisScale : lab.y
+
         // LAB to XYZ
         let fy = (lab.x + 16.0) / 116.0
-        let fx = lab.y / 500.0 + fy
+        let fx = a / 500.0 + fy
         let fz = fy - lab.z / 200.0
 
         let xr = fx > 0.206897 ? fx * fx * fx : (fx - 16.0/116.0) / 7.787

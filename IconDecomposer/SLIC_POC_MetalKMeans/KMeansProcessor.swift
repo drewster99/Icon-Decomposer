@@ -26,7 +26,8 @@ class KMeansProcessor {
     /// Result of K-means clustering
     struct ClusteringResult {
         let clusterAssignments: [Int]  // Cluster ID for each superpixel
-        let clusterCenters: [SIMD3<Float>]  // Center of each cluster in LAB space
+        let clusterCenters: [SIMD3<Float>]  // Center of each cluster in LAB space (recalculated to unweighted if weighted clustering was used)
+        let weightedCentersBeforeRecalc: [SIMD3<Float>]?  // Weighted centers before recalculation (only set when useWeightedColors is true)
         let numberOfClusters: Int
         let iterations: Int
         let converged: Bool
@@ -46,7 +47,7 @@ class KMeansProcessor {
             maxIterations: Int = 300,
             convergenceDistance: Float = 0.01,
             useWeightedColors: Bool = true,
-            lightnessWeight: Float = 0.65
+            lightnessWeight: Float = 0.35
         ) {
             self.numberOfClusters = numberOfClusters
             self.maxIterations = maxIterations
@@ -314,11 +315,13 @@ class KMeansProcessor {
         // Extract final results
         let finalAssignments = extractAssignments(buffer: assignmentsBuffer, count: numPoints)
         var finalCenters: [SIMD3<Float>]
+        var weightedCentersBeforeRecalc: [SIMD3<Float>]? = nil
 
         // If using weighted colors, recalculate centers from original colors
         if parameters.useWeightedColors {
             let recalcStartTime = CFAbsoluteTimeGetCurrent()
             let weightedCenters = extractCenters(buffer: centersBuffer, count: numClusters)
+            weightedCentersBeforeRecalc = weightedCenters  // Store for later use
             finalCenters = recalculateUnweightedCenters(
                 clusterAssignments: finalAssignments,
                 originalColors: originalColors,
@@ -346,6 +349,7 @@ class KMeansProcessor {
         return ClusteringResult(
             clusterAssignments: finalAssignments,
             clusterCenters: finalCenters,
+            weightedCentersBeforeRecalc: weightedCentersBeforeRecalc,
             numberOfClusters: numClusters,
             iterations: iterations,
             converged: converged,
@@ -834,13 +838,14 @@ class KMeansProcessor {
         pixelClusters: [UInt32],
         clusterCenters: [SIMD3<Float>],
         width: Int,
-        height: Int
+        height: Int,
+        greenAxisScale: Float = 2.0
     ) -> Data {
 
         // Debug: print cluster centers
         print("\nCluster Centers (LAB):")
         for (i, center) in clusterCenters.enumerated() {
-            let rgb = labToRGB(center)
+            let rgb = labToRGB(center, greenAxisScale: greenAxisScale)
             print(String(format: "  Cluster %d: LAB(%.1f, %.1f, %.1f) -> RGB(%.3f, %.3f, %.3f)",
                         i, center.x, center.y, center.z, rgb.x, rgb.y, rgb.z))
         }
@@ -859,7 +864,7 @@ class KMeansProcessor {
                     let labColor = clusterCenters[min(clusterId, clusterCenters.count - 1)]
 
                     // Convert LAB to RGB
-                    let rgb = labToRGB(labColor)
+                    let rgb = labToRGB(labColor, greenAxisScale: greenAxisScale)
 
                     // Write BGRA pixels with byteOrder32Little (matching SLIC processor)
                     let pixelOffset = idx * 4
@@ -875,10 +880,13 @@ class KMeansProcessor {
     }
 
     /// Convert LAB color to RGB
-    private static func labToRGB(_ lab: SIMD3<Float>) -> SIMD3<Float> {
+    private static func labToRGB(_ lab: SIMD3<Float>, greenAxisScale: Float = 2.0) -> SIMD3<Float> {
+        // Reverse green axis scaling if 'a' was scaled during RGB→LAB conversion
+        let a = lab.y < 0 ? lab.y / greenAxisScale : lab.y
+
         // LAB to XYZ
         let fy = (lab.x + 16.0) / 116.0
-        let fx = lab.y / 500.0 + fy
+        let fx = a / 500.0 + fy
         let fz = fy - lab.z / 200.0
 
         let xr = fx > 0.206897 ? fx * fx * fx : (fx - 16.0/116.0) / 7.787

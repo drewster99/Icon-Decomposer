@@ -68,6 +68,10 @@ struct ContentView: View {
     @State private var clusterCenters: [SIMD3<Float>] = []
     @State private var weightedClusterCenters: [SIMD3<Float>] = []
 
+    // Cluster average colors (mean of superpixels in each cluster)
+    @State private var clusterAverageColors: [SIMD3<Float>] = []
+    @State private var weightedClusterAverageColors: [SIMD3<Float>] = []
+
     // Distance matrix between cluster centers
     @State private var clusterDistances: [[Float]] = []
     @State private var weightedClusterDistances: [[Float]] = []
@@ -90,7 +94,8 @@ struct ContentView: View {
     // K-means parameters
     @State private var nClusters: Double = 5
     @State private var useWeightedColors = true
-    @State private var lightnessWeight: Double = 0.65
+    @State private var lightnessWeight: Double = 0.35
+    @State private var greenAxisScale: Double = 2.0
 
     private let processor = SLICProcessor()
 
@@ -125,7 +130,7 @@ struct ContentView: View {
                     HStack {
                         Text("Segments: \(Int(nSegments))")
                             .frame(width: 150, alignment: .leading)
-                        Slider(value: $nSegments, in: 200...2000, step: 50)
+                        Slider(value: $nSegments, in: 25...3000, step: 50)
                     }
 
                     HStack {
@@ -149,7 +154,7 @@ struct ContentView: View {
                     HStack {
                         Text("Clusters: \(Int(nClusters))")
                             .frame(width: 150, alignment: .leading)
-                        Slider(value: $nClusters, in: 2...10, step: 1)
+                        Slider(value: $nClusters, in: 2...30, step: 1)
                     }
 
                     Toggle("Use Weighted Colors", isOn: $useWeightedColors)
@@ -162,6 +167,12 @@ struct ContentView: View {
                     }
                     .disabled(!useWeightedColors)
                     .opacity(useWeightedColors ? 1.0 : 0.5)
+
+                    HStack {
+                        Text("Green Axis Scale: \(String(format: "%.1f", greenAxisScale))")
+                            .frame(width: 150, alignment: .leading)
+                        Slider(value: $greenAxisScale, in: 0.1...4.0, step: 0.1)
+                    }
                 }
                 .frame(maxWidth: 600)
 
@@ -302,6 +313,28 @@ struct ContentView: View {
                                 )
                         }
                     }
+
+                    // Recomposed Image
+                    VStack {
+                        Text("Recomposed")
+                            .font(.headline)
+                        if let recomposed = recomposedImage {
+                            Image(nsImage: recomposed)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .background(CheckerboardBackground())
+                                .frame(width: 256, height: 256)
+                                .border(Color.gray.opacity(0.3), width: 1)
+                        } else {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.1))
+                                .frame(width: 256, height: 256)
+                                .overlay(
+                                    Text("Process to see final")
+                                        .foregroundColor(.gray)
+                                )
+                        }
+                    }
                 }
                 .padding()
             }
@@ -311,24 +344,21 @@ struct ContentView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Cluster Centers")
+                    Text("Final Cluster Centers")
                         .font(.headline)
                         .padding(.horizontal)
 
-                    HStack(spacing: 15) {
+                    HStack(alignment: .top, spacing: 15) {
                         ForEach(Array(clusterCenters.enumerated()), id: \.offset) { index, center in
-                            VStack(spacing: 5) {
-                                Text("Cluster \(index)")
-                                    .font(.caption)
-                                Rectangle()
-                                    .fill(Color(nsColor: labToNSColor(center)))
-                                    .frame(width: 60, height: 60)
-                                    .border(Color.gray, width: 1)
-                                Text("LAB(\(String(format: "%.1f", center.x)), \(String(format: "%.1f", center.y)), \(String(format: "%.1f", center.z)))")
-                                    .font(.caption2)
-                                    .frame(width: 100)
-                            }
+                            ColorSwatchView(
+                                topLabel: "Cluster \(index)",
+                                labColor: center,
+                                bottomLabel: "LAB",
+                                greenAxisScale: Float(greenAxisScale),
+                                swatchSize: 60
+                            )
                         }
+                        Spacer()
                     }
                     .padding(.horizontal)
                 }
@@ -350,52 +380,43 @@ struct ContentView: View {
                                     .font(.subheadline)
                                     .fontWeight(.semibold)
 
-                                HStack(alignment: .top, spacing: 15) {
-                                    // Left side: visualization image and cluster centers
-                                    VStack(spacing: 8) {
-                                        Image(nsImage: snapshot.visualizationImage)
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fit)
-                                            .background(CheckerboardBackground())
-                                            .frame(width: 256, height: 256)
-                                            .border(Color.gray.opacity(0.3), width: 1)
+                                // Visualization image at top
+                                HStack {
+                                    Image(nsImage: snapshot.visualizationImage)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .background(CheckerboardBackground())
+                                        .frame(width: 256, height: 256)
+                                        .border(Color.gray.opacity(0.3), width: 1)
+                                    Spacer()
+                                }
 
-                                        // Cluster center swatches with LAB values
-                                        VStack(spacing: 5) {
-                                            Text("Cluster Centers")
-                                                .font(.caption2)
-                                                .fontWeight(.semibold)
-                                            HStack(spacing: 8) {
-                                                ForEach(Array(snapshot.clusterCenters.enumerated()), id: \.offset) { centerIndex, center in
-                                                    VStack(spacing: 3) {
-                                                        Rectangle()
-                                                            .fill(Color(nsColor: labToNSColor(center)))
-                                                            .frame(width: 40, height: 40)
-                                                            .border(Color.gray, width: 0.5)
-                                                        Text("\(centerIndex)")
-                                                            .font(.caption2)
-                                                        Text("LAB(\(String(format: "%.0f", center.x)),\(String(format: "%.0f", center.y)),\(String(format: "%.0f", center.z)))")
-                                                            .font(.caption2)
-                                                            .frame(width: 80)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+                                // Cluster extractions with swatches below
+                                ScrollView(.horizontal) {
+                                    HStack(spacing: 15) {
+                                        ForEach(Array(snapshot.layerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
+                                            VStack(spacing: 5) {
+                                                // Cluster label
+                                                Text("Cluster \(layerIndex)")
+                                                    .font(.caption)
+                                                    .fontWeight(.medium)
 
-                                    // Right side: extracted layers
-                                    ScrollView(.horizontal) {
-                                        HStack(spacing: 10) {
-                                            ForEach(Array(snapshot.layerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
-                                                VStack(spacing: 5) {
-                                                    Text("Cluster \(layerIndex)")
-                                                        .font(.caption2)
-                                                    Image(nsImage: layerImage)
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fit)
-                                                        .background(CheckerboardBackground())
-                                                        .frame(width: 150, height: 150)
-                                                        .border(Color.gray.opacity(0.3), width: 1)
+                                                // Layer image
+                                                Image(nsImage: layerImage)
+                                                    .resizable()
+                                                    .aspectRatio(contentMode: .fit)
+                                                    .background(CheckerboardBackground())
+                                                    .frame(width: 150, height: 150)
+                                                    .border(Color.gray.opacity(0.3), width: 1)
+
+                                                // Cluster center swatch below
+                                                if layerIndex < snapshot.clusterCenters.count {
+                                                    let center = snapshot.clusterCenters[layerIndex]
+                                                    ColorSwatchView(
+                                                        labColor: center,
+                                                        bottomLabel: "LAB",
+                                                        greenAxisScale: Float(greenAxisScale)
+                                                    )
                                                 }
                                             }
                                         }
@@ -426,88 +447,54 @@ struct ContentView: View {
                             .fontWeight(.semibold)
                             .padding(.horizontal)
 
-                        VStack(alignment: .leading, spacing: 15) {
-                            // Cluster center swatches
-                            HStack(spacing: 8) {
-                                ForEach(Array(clusterCenters.enumerated()), id: \.offset) { index, center in
-                                    VStack(spacing: 3) {
-                                        Rectangle()
-                                            .fill(Color(nsColor: labToNSColor(center)))
-                                            .frame(width: 60, height: 60)
-                                            .border(Color.gray, width: 1)
-                                        Text("\(index)")
-                                            .font(.caption2)
-                                        Text("LAB(\(String(format: "%.0f", center.x)),\(String(format: "%.0f", center.y)),\(String(format: "%.0f", center.z)))")
-                                            .font(.caption2)
-                                            .frame(width: 100)
-                                    }
-                                }
-                            }
+                        ScrollView(.horizontal) {
+                            HStack(spacing: 15) {
+                                ForEach(Array(layerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
+                                    VStack(spacing: 5) {
+                                        // Cluster label
+                                        Text("Cluster \(layerIndex)")
+                                            .font(.caption)
+                                            .fontWeight(.medium)
 
-                            // Extracted layers
-                            if !layerImages.isEmpty {
-                                ScrollView(.horizontal) {
-                                    HStack(spacing: 10) {
-                                        ForEach(Array(layerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
-                                            VStack(spacing: 5) {
-                                                Text("Cluster \(layerIndex)")
+                                        // Layer image
+                                        Image(nsImage: layerImage)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fit)
+                                            .background(CheckerboardBackground())
+                                            .frame(width: 150, height: 150)
+                                            .border(Color.gray.opacity(0.3), width: 1)
+
+                                        // Cluster center swatch
+                                        if layerIndex < clusterCenters.count {
+                                            let center = clusterCenters[layerIndex]
+                                            ColorSwatchView(
+                                                topLabel: "Center",
+                                                labColor: center,
+                                                bottomLabel: "LAB",
+                                                greenAxisScale: Float(greenAxisScale)
+                                            )
+                                        }
+
+                                        // Cluster average color swatch
+                                        if layerIndex < clusterAverageColors.count {
+                                            let avgColor = clusterAverageColors[layerIndex]
+                                            ColorSwatchView(
+                                                topLabel: "Average",
+                                                labColor: avgColor,
+                                                bottomLabel: "LAB",
+                                                greenAxisScale: Float(greenAxisScale)
+                                            )
+                                            .padding(.top, 10)
+
+                                            // Distance between center and average
+                                            if layerIndex < clusterCenters.count {
+                                                let center = clusterCenters[layerIndex]
+                                                let diff = center - avgColor
+                                                let distance = sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z)
+                                                Text("Δ \(String(format: "%.1f", distance))")
                                                     .font(.caption2)
-                                                Image(nsImage: layerImage)
-                                                    .resizable()
-                                                    .aspectRatio(contentMode: .fit)
-                                                    .background(CheckerboardBackground())
-                                                    .frame(width: 150, height: 150)
-                                                    .border(Color.gray.opacity(0.3), width: 1)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.horizontal)
-                    }
-
-                    // Weighted Cluster Centers
-                    if !weightedClusterCenters.isEmpty && useWeightedColors {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Weighted (L×\(String(format: "%.2f", lightnessWeight)), a, b)")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-                                .padding(.horizontal)
-
-                            VStack(alignment: .leading, spacing: 15) {
-                                // Cluster center swatches
-                                HStack(spacing: 8) {
-                                    ForEach(Array(weightedClusterCenters.enumerated()), id: \.offset) { index, center in
-                                        VStack(spacing: 3) {
-                                            Rectangle()
-                                                .fill(Color(nsColor: labToNSColor(center)))
-                                                .frame(width: 60, height: 60)
-                                                .border(Color.gray, width: 1)
-                                            Text("\(index)")
-                                                .font(.caption2)
-                                            Text("LAB(\(String(format: "%.0f", center.x)),\(String(format: "%.0f", center.y)),\(String(format: "%.0f", center.z)))")
-                                                .font(.caption2)
-                                                .frame(width: 100)
-                                        }
-                                    }
-                                }
-
-                                // Extracted layers
-                                if !weightedLayerImages.isEmpty {
-                                    ScrollView(.horizontal) {
-                                        HStack(spacing: 10) {
-                                            ForEach(Array(weightedLayerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
-                                                VStack(spacing: 5) {
-                                                    Text("Cluster \(layerIndex)")
-                                                        .font(.caption2)
-                                                    Image(nsImage: layerImage)
-                                                        .resizable()
-                                                        .aspectRatio(contentMode: .fit)
-                                                        .background(CheckerboardBackground())
-                                                        .frame(width: 150, height: 150)
-                                                        .border(Color.gray.opacity(0.3), width: 1)
-                                                }
+                                                    .foregroundColor(.blue)
+                                                    .padding(.top, 5)
                                             }
                                         }
                                     }
@@ -549,10 +536,75 @@ struct ContentView: View {
                                                     .font(.caption2)
                                                     .frame(width: 50)
                                                     .background(
-                                                        i == j ? Color.gray.opacity(0.2) :
-                                                        shouldHighlightCell(distances: clusterDistances, row: i, col: j) ? Color.yellow.opacity(0.3) :
-                                                        Color.clear
+                                                        getDistanceHighlightColor(distances: clusterDistances, row: i, col: j) ?? Color.clear
                                                     )
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+                    }
+
+                    // Weighted Cluster Centers
+                    if !weightedClusterCenters.isEmpty && useWeightedColors {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Weighted (L×\(String(format: "%.2f", lightnessWeight)), a, b)")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .padding(.horizontal)
+                                .padding(.top, 20)
+
+                            ScrollView(.horizontal) {
+                                HStack(spacing: 15) {
+                                    ForEach(Array(weightedLayerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
+                                        VStack(spacing: 5) {
+                                            // Cluster label
+                                            Text("Cluster \(layerIndex)")
+                                                .font(.caption)
+                                                .fontWeight(.medium)
+
+                                            // Layer image
+                                            Image(nsImage: layerImage)
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .background(CheckerboardBackground())
+                                                .frame(width: 150, height: 150)
+                                                .border(Color.gray.opacity(0.3), width: 1)
+
+                                            // Cluster center swatch
+                                            if layerIndex < weightedClusterCenters.count {
+                                                let center = weightedClusterCenters[layerIndex]
+                                                ColorSwatchView(
+                                                    topLabel: "Center",
+                                                    labColor: center,
+                                                    bottomLabel: "LAB",
+                                                    greenAxisScale: Float(greenAxisScale)
+                                                )
+                                            }
+
+                                            // Cluster average color swatch (UNweighted - to compare with weighted center)
+                                            if layerIndex < clusterAverageColors.count {
+                                                let avgColor = clusterAverageColors[layerIndex]
+                                                ColorSwatchView(
+                                                    topLabel: "Average",
+                                                    labColor: avgColor,
+                                                    bottomLabel: "LAB",
+                                                    greenAxisScale: Float(greenAxisScale)
+                                                )
+                                                .padding(.top, 10)
+
+                                                // Distance between weighted center and unweighted average
+                                                if layerIndex < weightedClusterCenters.count {
+                                                    let center = weightedClusterCenters[layerIndex]
+                                                    let diff = center - avgColor
+                                                    let distance = sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z)
+                                                    Text("Δ \(String(format: "%.1f", distance))")
+                                                        .font(.caption2)
+                                                        .foregroundColor(.blue)
+                                                        .padding(.top, 5)
+                                                }
                                             }
                                         }
                                     }
@@ -594,9 +646,7 @@ struct ContentView: View {
                                                     .font(.caption2)
                                                     .frame(width: 50)
                                                     .background(
-                                                        i == j ? Color.gray.opacity(0.2) :
-                                                        shouldHighlightCell(distances: weightedClusterDistances, row: i, col: j) ? Color.yellow.opacity(0.3) :
-                                                        Color.clear
+                                                        getDistanceHighlightColor(distances: weightedClusterDistances, row: i, col: j) ?? Color.clear
                                                     )
                                             }
                                         }
@@ -655,7 +705,6 @@ struct ContentView: View {
                         .padding(.horizontal)
 
                     HStack {
-                        Spacer()
                         Image(nsImage: recomposed)
                             .resizable()
                             .aspectRatio(contentMode: .fit)
@@ -664,7 +713,7 @@ struct ContentView: View {
                             .border(Color.gray.opacity(0.3), width: 1)
                         Spacer()
                     }
-                    .padding()
+                    .padding(.horizontal)
                 }
             }
 
@@ -677,6 +726,109 @@ struct ContentView: View {
             loadSelectedImage()
         }
     }
+
+    // MARK: - Color Swatch View Component
+
+    /// Reusable color swatch view with consistent formatting
+    struct ColorSwatchView: View {
+        let topLabel: String?
+        let labColor: SIMD3<Float>
+        let bottomLabel: String?
+        let greenAxisScale: Float
+        let swatchSize: CGFloat
+
+        init(
+            topLabel: String? = nil,
+            labColor: SIMD3<Float>,
+            bottomLabel: String? = nil,
+            greenAxisScale: Float = 2.0,
+            swatchSize: CGFloat = 50
+        ) {
+            self.topLabel = topLabel
+            self.labColor = labColor
+            self.bottomLabel = bottomLabel
+            self.greenAxisScale = greenAxisScale
+            self.swatchSize = swatchSize
+        }
+
+        var body: some View {
+            VStack(spacing: 3) {
+                // Top label (optional)
+                if let topLabel = topLabel {
+                    Text(topLabel)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+
+                // Color swatch
+                Rectangle()
+                    .fill(Color(nsColor: labToNSColor(labColor, greenAxisScale: greenAxisScale)))
+                    .frame(width: swatchSize, height: swatchSize)
+                    .border(Color.gray, width: 0.5)
+
+                // LAB values (formatted without parentheses, 1 decimal place)
+                Text("\(String(format: "%.1f", labColor.x)), \(String(format: "%.1f", labColor.y)), \(String(format: "%.1f", labColor.z))")
+                    .font(.caption2)
+                    .fixedSize(horizontal: true, vertical: false)
+
+                // Bottom label (optional)
+                if let bottomLabel = bottomLabel {
+                    Text(bottomLabel)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
+            }
+        }
+
+        /// Convert LAB color to NSColor for SwiftUI display
+        private func labToNSColor(_ lab: SIMD3<Float>, greenAxisScale: Float) -> NSColor {
+            // Reverse green axis scaling if 'a' was scaled during RGB→LAB conversion
+            let a = lab.y < 0 ? lab.y / greenAxisScale : lab.y
+
+            // LAB to XYZ
+            let fy = (lab.x + 16.0) / 116.0
+            let fx = a / 500.0 + fy
+            let fz = fy - lab.z / 200.0
+
+            func f_inv(_ t: Float) -> Float {
+                let delta: Float = 6.0 / 29.0
+                return t > delta ? t * t * t : 3.0 * delta * delta * (t - 4.0 / 29.0)
+            }
+
+            let xn: Float = 0.95047
+            let yn: Float = 1.00000
+            let zn: Float = 1.08883
+
+            let x = xn * f_inv(fx)
+            let y = yn * f_inv(fy)
+            let z = zn * f_inv(fz)
+
+            // XYZ to RGB (sRGB D65)
+            var r = 3.2406 * x - 1.5372 * y - 0.4986 * z
+            var g = -0.9689 * x + 1.8758 * y + 0.0415 * z
+            var b = 0.0557 * x - 0.2040 * y + 1.0570 * z
+
+            // Gamma correction
+            func gamma(_ c: Float) -> Float {
+                return c > 0.0031308 ? 1.055 * pow(c, 1.0/2.4) - 0.055 : 12.92 * c
+            }
+
+            r = gamma(r)
+            g = gamma(g)
+            b = gamma(b)
+
+            return NSColor(
+                red: CGFloat(max(0, min(1, r))),
+                green: CGFloat(max(0, min(1, g))),
+                blue: CGFloat(max(0, min(1, b))),
+                alpha: 1.0
+            )
+        }
+    }
+
+    // MARK: - Helper Methods
 
     private func loadSelectedImage() {
         errorMessage = nil
@@ -749,7 +901,8 @@ struct ContentView: View {
             nSegments: Int(nSegments),
             compactness: Float(compactness),
             iterations: Int(iterations),
-            enforceConnectivity: enforceConnectivity
+            enforceConnectivity: enforceConnectivity,
+            greenAxisScale: Float(greenAxisScale)
         )
 
         DispatchQueue.global(qos: .userInitiated).async {
@@ -789,7 +942,7 @@ struct ContentView: View {
                     #endif
 
                     // Generate superpixel average color visualization
-                    superpixelAvgNSImage = SuperpixelProcessor.visualizeSuperpixelAverageColors(superpixelData: superpixelData)
+                    superpixelAvgNSImage = SuperpixelProcessor.visualizeSuperpixelAverageColors(superpixelData: superpixelData, greenAxisScale: Float(self.greenAxisScale))
 
                     // Check if we have any visible superpixels to cluster
                     guard !superpixelData.superpixels.isEmpty else {
@@ -842,7 +995,8 @@ struct ContentView: View {
                         pixelClusters: pixelClusters,
                         clusterCenters: clusterResult.clusterCenters,
                         width: result.width,
-                        height: result.height
+                        height: result.height,
+                        greenAxisScale: Float(self.greenAxisScale)
                     )
                     let vizTime = CFAbsoluteTimeGetCurrent() - vizStart
                     #if DEBUG
@@ -866,7 +1020,8 @@ struct ContentView: View {
                             pixelClusters: pixelClusters,
                             clusterCenters: weightedCenters,
                             width: result.width,
-                            height: result.height
+                            height: result.height,
+                            greenAxisScale: Float(self.greenAxisScale)
                         )
                         if let weightedCGImage = self.createCGImage(from: weightedPixelData, width: result.width, height: result.height) {
                             weightedKmeansNSImage = NSImage(cgImage: weightedCGImage, size: NSSize(width: result.width, height: result.height))
@@ -922,7 +1077,20 @@ struct ContentView: View {
                     self.layerImages = layers
                     self.weightedLayerImages = weightedLayers
                     self.clusterCenters = debugClusterResult?.clusterCenters ?? []
-                    self.weightedClusterCenters = self.applyLightnessWeighting(self.clusterCenters, weight: Float(self.lightnessWeight))
+
+                    // Use weighted centers before recalculation if available, otherwise apply weighting manually
+                    if let weightedCenters = debugClusterResult?.weightedCentersBeforeRecalc {
+                        self.weightedClusterCenters = weightedCenters
+                    } else {
+                        self.weightedClusterCenters = self.applyLightnessWeighting(self.clusterCenters, weight: Float(self.lightnessWeight))
+                    }
+
+                    // Calculate cluster average colors from superpixels
+                    if let spData = debugSuperpixelData, let clResult = debugClusterResult {
+                        self.clusterAverageColors = self.calculateClusterAverageColors(superpixelData: spData, clusterResult: clResult)
+                        self.weightedClusterAverageColors = self.applyLightnessWeighting(self.clusterAverageColors, weight: Float(self.lightnessWeight))
+                    }
+
                     self.clusterDistances = self.calculateClusterDistances(self.clusterCenters)
                     self.weightedClusterDistances = self.calculateClusterDistances(self.weightedClusterCenters)
                     self.iterationSnapshots = debugClusterResult?.iterationSnapshots ?? []
@@ -1138,6 +1306,38 @@ struct ContentView: View {
         }
     }
 
+    /// Calculate average LAB colors for each cluster from superpixels
+    private func calculateClusterAverageColors(
+        superpixelData: SuperpixelProcessor.SuperpixelData,
+        clusterResult: KMeansProcessor.ClusteringResult
+    ) -> [SIMD3<Float>] {
+        let numClusters = clusterResult.numberOfClusters
+        var clusterSums = Array(repeating: SIMD3<Float>(0, 0, 0), count: numClusters)
+        var clusterCounts = Array(repeating: 0, count: numClusters)
+
+        // Accumulate LAB colors for each cluster
+        for (superpixelIndex, clusterAssignment) in clusterResult.clusterAssignments.enumerated() {
+            if superpixelIndex < superpixelData.superpixels.count {
+                let superpixel = superpixelData.superpixels[superpixelIndex]
+                clusterSums[clusterAssignment] += superpixel.labColor
+                clusterCounts[clusterAssignment] += 1
+            }
+        }
+
+        // Calculate averages
+        var averages: [SIMD3<Float>] = []
+        for i in 0..<numClusters {
+            if clusterCounts[i] > 0 {
+                averages.append(clusterSums[i] / Float(clusterCounts[i]))
+            } else {
+                // Empty cluster - use cluster center as fallback
+                averages.append(clusterResult.clusterCenters[i])
+            }
+        }
+
+        return averages
+    }
+
     /// Calculate distance matrix between cluster centers
     private func calculateClusterDistances(_ centers: [SIMD3<Float>]) -> [[Float]] {
         let n = centers.count
@@ -1159,30 +1359,36 @@ struct ContentView: View {
         return distances
     }
 
-    /// Check if a cell should be highlighted (min in row, excluding diagonal)
-    private func shouldHighlightCell(distances: [[Float]], row: Int, col: Int) -> Bool {
-        if row == col {
-            return false  // Don't highlight diagonal
+    /// Get highlight color for distance matrix cell based on value
+    /// Only highlights upper triangle (j > i) with value-based colors
+    private func getDistanceHighlightColor(distances: [[Float]], row: Int, col: Int) -> Color? {
+        // Don't highlight diagonal or lower triangle
+        if col <= row {
+            return row == col ? Color.gray.opacity(0.2) : nil
         }
 
-        let n = distances.count
         let value = distances[row][col]
 
-        // Check if minimum in row (excluding diagonal)
-        for j in 0..<n {
-            if j != row && distances[row][j] < value {
-                return false
-            }
+        // Color based on distance value
+        if value < 10 {
+            return Color.green.opacity(0.5)
+        } else if value <= 20 {
+            return Color.yellow.opacity(0.5)
+        } else if value <= 30 {
+            return Color.orange.opacity(0.3)
+        } else {
+            return nil  // No highlight for values > 30
         }
-
-        return true
     }
 
     /// Convert LAB color to NSColor for SwiftUI display
-    private func labToNSColor(_ lab: SIMD3<Float>) -> NSColor {
+    private func labToNSColor(_ lab: SIMD3<Float>, greenAxisScale: Float = 2.0) -> NSColor {
+        // Reverse green axis scaling if 'a' was scaled during RGB→LAB conversion
+        let a = lab.y < 0 ? lab.y / greenAxisScale : lab.y
+
         // LAB to XYZ
         let fy = (lab.x + 16.0) / 116.0
-        let fx = lab.y / 500.0 + fy
+        let fx = a / 500.0 + fy
         let fz = fy - lab.z / 200.0
 
         let xr = fx > 0.206897 ? fx * fx * fx : (fx - 16.0/116.0) / 7.787

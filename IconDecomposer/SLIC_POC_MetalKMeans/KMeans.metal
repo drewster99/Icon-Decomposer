@@ -202,7 +202,7 @@ kernel void findFarthestPoint(
 kernel void applyColorWeighting(
     device const float3* originalColors [[buffer(0)]],   // Original LAB colors
     device float3* weightedColors [[buffer(1)]],         // Output: weighted colors
-    constant float& lightnessWeight [[buffer(2)]],       // Weight for L channel (e.g., 0.65)
+    constant float& lightnessWeight [[buffer(2)]],       // Weight for L channel (e.g., 0.35)
     constant KMeansParams& params [[buffer(3)]],
     uint gid [[thread_position_in_grid]])
 {

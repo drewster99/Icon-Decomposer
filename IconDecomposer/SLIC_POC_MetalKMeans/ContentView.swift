@@ -8,6 +8,25 @@
 import SwiftUI
 import AppKit
 
+/// Snapshot of cluster merge state at a particular step
+struct MergeSnapshot {
+    let stepNumber: Int
+    let mergedClusterA: Int
+    let mergedClusterB: Int
+    let weightedDistance: Float
+    let unweightedDistance: Float
+    let clusterCenters: [SIMD3<Float>]
+    let weightedClusterCenters: [SIMD3<Float>]
+    let clusterAverageColors: [SIMD3<Float>]
+    let weightedClusterAverageColors: [SIMD3<Float>]
+    let clusterDistances: [[Float]]
+    let weightedClusterDistances: [[Float]]
+    let layerImages: [NSImage]
+    let weightedLayerImages: [NSImage]
+    let visualizationImage: NSImage
+    let weightedVisualizationImage: NSImage?
+}
+
 struct CheckerboardBackground: View {
     var body: some View {
         Color.blue.opacity(0.6)
@@ -81,6 +100,12 @@ struct ContentView: View {
 
     // Recomposed image from final layers
     @State private var recomposedImage: NSImage?
+
+    // Auto-combine clusters state
+    @State private var mergeThreshold: Double = 30.0
+    @State private var originalClusterResult: KMeansProcessor.ClusteringResult?
+    @State private var originalPixelClusters: [UInt32] = []
+    @State private var mergeSnapshots: [MergeSnapshot] = []
 
     // Test image names (will be added to Assets.xcassets)
     let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4"]
@@ -417,6 +442,277 @@ struct ContentView: View {
                                                         bottomLabel: "LAB",
                                                         greenAxisScale: Float(greenAxisScale)
                                                     )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(.horizontal)
+
+                            Divider()
+                        }
+                    }
+                }
+            }
+
+            // Auto-Combine Clusters Controls
+            if !clusterCenters.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 15) {
+                    Text("Auto-Combine Clusters")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    VStack(spacing: 10) {
+                        HStack {
+                            Text("Merge Threshold: \(String(format: "%.1f", mergeThreshold))")
+                                .frame(width: 180, alignment: .leading)
+                            Slider(value: $mergeThreshold, in: 10...50, step: 1)
+                                .frame(maxWidth: 300)
+                        }
+                        .padding(.horizontal)
+
+                        HStack(spacing: 15) {
+                            Button("Auto Combine") {
+                                autoCombineClusters()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Reset to Original") {
+                                resetToOriginalClusters()
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(originalClusterResult == nil || mergeSnapshots.isEmpty)
+
+                            if !mergeSnapshots.isEmpty {
+                                Text("(\(mergeSnapshots.count) merges performed)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+                        }
+                        .padding(.horizontal)
+                    }
+                    .padding(.vertical, 10)
+                    .background(Color.blue.opacity(0.05))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
+                }
+            }
+
+            // Merge History section
+            if !mergeSnapshots.isEmpty {
+                Divider()
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Cluster Merge History (\(mergeSnapshots.count) merges)")
+                        .font(.headline)
+                        .padding(.horizontal)
+
+                    VStack(spacing: 20) {
+                        ForEach(Array(mergeSnapshots.enumerated()), id: \.offset) { index, snapshot in
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Merge Step \(snapshot.stepNumber): Cluster \(snapshot.mergedClusterA) + Cluster \(snapshot.mergedClusterB)")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+
+                                Text("Weighted distance: \(String(format: "%.1f", snapshot.weightedDistance)), Unweighted distance: \(String(format: "%.1f", snapshot.unweightedDistance))")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+
+                                // Visualization image
+                                HStack {
+                                    Image(nsImage: snapshot.visualizationImage)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .background(CheckerboardBackground())
+                                        .frame(width: 256, height: 256)
+                                        .border(Color.gray.opacity(0.3), width: 1)
+                                    Spacer()
+                                }
+
+                                // Unweighted clusters section
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Unweighted (True LAB Colors)")
+                                        .font(.caption)
+                                        .fontWeight(.semibold)
+
+                                    ScrollView(.horizontal) {
+                                        HStack(spacing: 15) {
+                                            ForEach(Array(snapshot.layerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
+                                                VStack(spacing: 5) {
+                                                    Text("Cluster \(layerIndex)")
+                                                        .font(.caption2)
+                                                        .fontWeight(.medium)
+
+                                                    Image(nsImage: layerImage)
+                                                        .resizable()
+                                                        .aspectRatio(contentMode: .fit)
+                                                        .background(CheckerboardBackground())
+                                                        .frame(width: 120, height: 120)
+                                                        .border(Color.gray.opacity(0.3), width: 1)
+
+                                                    if layerIndex < snapshot.clusterCenters.count {
+                                                        let center = snapshot.clusterCenters[layerIndex]
+                                                        ColorSwatchView(
+                                                            topLabel: "Center",
+                                                            labColor: center,
+                                                            bottomLabel: "LAB",
+                                                            greenAxisScale: Float(greenAxisScale),
+                                                            swatchSize: 40
+                                                        )
+                                                    }
+
+                                                    if layerIndex < snapshot.clusterAverageColors.count {
+                                                        let avgColor = snapshot.clusterAverageColors[layerIndex]
+                                                        ColorSwatchView(
+                                                            topLabel: "Pixels",
+                                                            labColor: avgColor,
+                                                            bottomLabel: "LAB",
+                                                            greenAxisScale: Float(greenAxisScale),
+                                                            swatchSize: 40
+                                                        )
+                                                        .padding(.top, 5)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Weighted clusters section
+                                if useWeightedColors && !snapshot.weightedLayerImages.isEmpty {
+                                    VStack(alignment: .leading, spacing: 8) {
+                                        Text("Weighted (L×\(String(format: "%.2f", lightnessWeight)), a, b)")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .padding(.top, 10)
+
+                                        ScrollView(.horizontal) {
+                                            HStack(spacing: 15) {
+                                                ForEach(Array(snapshot.weightedLayerImages.enumerated()), id: \.offset) { layerIndex, layerImage in
+                                                    VStack(spacing: 5) {
+                                                        Text("Cluster \(layerIndex)")
+                                                            .font(.caption2)
+                                                            .fontWeight(.medium)
+
+                                                        Image(nsImage: layerImage)
+                                                            .resizable()
+                                                            .aspectRatio(contentMode: .fit)
+                                                            .background(CheckerboardBackground())
+                                                            .frame(width: 120, height: 120)
+                                                            .border(Color.gray.opacity(0.3), width: 1)
+
+                                                        if layerIndex < snapshot.weightedClusterCenters.count {
+                                                            let center = snapshot.weightedClusterCenters[layerIndex]
+                                                            ColorSwatchView(
+                                                                topLabel: "Center",
+                                                                labColor: center,
+                                                                bottomLabel: "LAB",
+                                                                greenAxisScale: Float(greenAxisScale),
+                                                                swatchSize: 40
+                                                            )
+                                                        }
+
+                                                        if layerIndex < snapshot.weightedClusterAverageColors.count {
+                                                            let avgColor = snapshot.weightedClusterAverageColors[layerIndex]
+                                                            ColorSwatchView(
+                                                                topLabel: "Pixels",
+                                                                labColor: avgColor,
+                                                                bottomLabel: "LAB",
+                                                                greenAxisScale: Float(greenAxisScale),
+                                                                swatchSize: 40
+                                                            )
+                                                            .padding(.top, 5)
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Distance Matrix - Unweighted
+                                if !snapshot.clusterDistances.isEmpty {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("Unweighted Cluster Distance Matrix (LAB Euclidean)")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .padding(.top, 10)
+
+                                        ScrollView(.horizontal) {
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                // Header row
+                                                HStack(spacing: 0) {
+                                                    Text("")
+                                                        .frame(width: 40)
+                                                    ForEach(0..<snapshot.clusterCenters.count, id: \.self) { j in
+                                                        Text("\(j)")
+                                                            .font(.caption2)
+                                                            .frame(width: 50)
+                                                    }
+                                                }
+
+                                                // Data rows
+                                                ForEach(0..<snapshot.clusterDistances.count, id: \.self) { i in
+                                                    HStack(spacing: 0) {
+                                                        Text("\(i)")
+                                                            .font(.caption2)
+                                                            .frame(width: 40)
+                                                        ForEach(0..<snapshot.clusterDistances[i].count, id: \.self) { j in
+                                                            Text(String(format: "%.1f", snapshot.clusterDistances[i][j]))
+                                                                .font(.caption2)
+                                                                .frame(width: 50)
+                                                                .background(
+                                                                    getDistanceHighlightColor(distances: snapshot.clusterDistances, row: i, col: j) ?? Color.clear
+                                                                )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Distance Matrix - Weighted
+                                if useWeightedColors && !snapshot.weightedClusterDistances.isEmpty {
+                                    VStack(alignment: .leading, spacing: 5) {
+                                        Text("Weighted Cluster Distance Matrix (LAB Euclidean, L×\(String(format: "%.2f", lightnessWeight)))")
+                                            .font(.caption)
+                                            .fontWeight(.semibold)
+                                            .padding(.top, 10)
+
+                                        ScrollView(.horizontal) {
+                                            VStack(alignment: .leading, spacing: 3) {
+                                                // Header row
+                                                HStack(spacing: 0) {
+                                                    Text("")
+                                                        .frame(width: 40)
+                                                    ForEach(0..<snapshot.weightedClusterCenters.count, id: \.self) { j in
+                                                        Text("\(j)")
+                                                            .font(.caption2)
+                                                            .frame(width: 50)
+                                                    }
+                                                }
+
+                                                // Data rows
+                                                ForEach(0..<snapshot.weightedClusterDistances.count, id: \.self) { i in
+                                                    HStack(spacing: 0) {
+                                                        Text("\(i)")
+                                                            .font(.caption2)
+                                                            .frame(width: 40)
+                                                        ForEach(0..<snapshot.weightedClusterDistances[i].count, id: \.self) { j in
+                                                            Text(String(format: "%.1f", snapshot.weightedClusterDistances[i][j]))
+                                                                .font(.caption2)
+                                                                .frame(width: 50)
+                                                                .background(
+                                                                    getDistanceHighlightColor(distances: snapshot.weightedClusterDistances, row: i, col: j) ?? Color.clear
+                                                                )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -1112,6 +1408,11 @@ struct ContentView: View {
                     self.debugSuperpixelData = debugSuperpixelData
                     self.debugClusterResult = debugClusterResult
 
+                    // Clear merge state when processing new image
+                    self.originalClusterResult = nil
+                    self.originalPixelClusters = []
+                    self.mergeSnapshots = []
+
                     self.isProcessing = false
                 }
             } else {
@@ -1557,6 +1858,357 @@ struct ContentView: View {
             blue: gammaCorrect(b),
             alpha: 1.0
         )
+    }
+
+    // MARK: - Auto-Combine Clusters Functions
+
+    /// Find the closest cluster pair to merge
+    /// Uses weighted distances to find the pair, but checks unweighted threshold
+    private func findClosestClusterPair(
+        weightedDistances: [[Float]],
+        unweightedDistances: [[Float]],
+        threshold: Float
+    ) -> (clusterA: Int, clusterB: Int, weightedDist: Float, unweightedDist: Float)? {
+        guard weightedDistances.count == unweightedDistances.count,
+              !weightedDistances.isEmpty else {
+            return nil
+        }
+
+        let n = weightedDistances.count
+        var minWeightedDist = Float.infinity
+        var minPair: (Int, Int)? = nil
+
+        // Find pair with minimum weighted distance
+        for i in 0..<n {
+            for j in (i+1)..<n {
+                let dist = weightedDistances[i][j]
+                if dist < minWeightedDist {
+                    minWeightedDist = dist
+                    minPair = (i, j)
+                }
+            }
+        }
+
+        guard let (i, j) = minPair else {
+            return nil
+        }
+
+        let unweightedDist = unweightedDistances[i][j]
+
+        // Check if minimum unweighted distance exceeds threshold
+        var minUnweightedDist = Float.infinity
+        for row in 0..<n {
+            for col in (row+1)..<n {
+                minUnweightedDist = min(minUnweightedDist, unweightedDistances[row][col])
+            }
+        }
+
+        // Only return the pair if we should continue merging
+        if minUnweightedDist > threshold {
+            return nil
+        }
+
+        return (i, j, minWeightedDist, unweightedDist)
+    }
+
+    /// Merge two clusters and return updated cluster assignments and centers
+    private func mergeClusters(
+        clusterA: Int,
+        clusterB: Int,
+        superpixelData: SuperpixelProcessor.SuperpixelData,
+        clusterAssignments: [Int]
+    ) -> (newAssignments: [Int], newCenters: [SIMD3<Float>]) {
+        // Remap cluster B to cluster A
+        var newAssignments = clusterAssignments.map { assignment in
+            if assignment == clusterB {
+                return clusterA
+            } else if assignment > clusterB {
+                // Shift down cluster IDs above clusterB
+                return assignment - 1
+            } else {
+                return assignment
+            }
+        }
+
+        // Calculate new cluster centers from superpixels
+        let uniqueClusters = Set(newAssignments).sorted()
+        var newCenters: [SIMD3<Float>] = []
+
+        for clusterId in uniqueClusters {
+            var colorSum = SIMD3<Float>(0, 0, 0)
+            var count = 0
+
+            for (spIndex, assignment) in newAssignments.enumerated() {
+                if assignment == clusterId && spIndex < superpixelData.superpixels.count {
+                    colorSum += superpixelData.superpixels[spIndex].labColor
+                    count += 1
+                }
+            }
+
+            if count > 0 {
+                newCenters.append(colorSum / Float(count))
+            } else {
+                // Empty cluster - shouldn't happen but handle gracefully
+                newCenters.append(SIMD3<Float>(50, 0, 0))
+            }
+        }
+
+        return (newAssignments, newCenters)
+    }
+
+    /// Auto-combine clusters based on weighted distances until threshold is exceeded
+    private func autoCombineClusters() {
+        guard let result = lastProcessingResult,
+              let superpixelData = debugSuperpixelData,
+              let clusterResult = debugClusterResult,
+              !pixelClusters.isEmpty,
+              let originalImage = originalImage else {
+            errorMessage = "No clustering result available. Run 'Process Image' first."
+            return
+        }
+
+        // Save original state for reset
+        if originalClusterResult == nil {
+            originalClusterResult = clusterResult
+            originalPixelClusters = pixelClusters
+        }
+
+        // Start with current cluster state
+        var currentAssignments = clusterResult.clusterAssignments
+        var currentCenters = clusterResult.clusterCenters
+        var currentWeightedCenters = applyLightnessWeighting(currentCenters, weight: Float(lightnessWeight))
+        var stepNumber = 0
+
+        mergeSnapshots.removeAll()
+
+        while true {
+            // Calculate distance matrices
+            let unweightedDists = calculateClusterDistances(currentCenters)
+            let weightedDists = calculateClusterDistances(currentWeightedCenters)
+
+            // Find closest pair
+            guard let (clusterA, clusterB, weightedDist, unweightedDist) = findClosestClusterPair(
+                weightedDistances: weightedDists,
+                unweightedDistances: unweightedDists,
+                threshold: Float(mergeThreshold)
+            ) else {
+                // Stopping condition met
+                print("Auto-combine stopped: min unweighted distance > \(mergeThreshold)")
+                break
+            }
+
+            stepNumber += 1
+            print("Merge step \(stepNumber): Combining clusters \(clusterA) and \(clusterB)")
+            print("  Weighted distance: \(weightedDist), Unweighted distance: \(unweightedDist)")
+
+            // Perform the merge
+            let (newAssignments, newCenters) = mergeClusters(
+                clusterA: clusterA,
+                clusterB: clusterB,
+                superpixelData: superpixelData,
+                clusterAssignments: currentAssignments
+            )
+
+            currentAssignments = newAssignments
+            currentCenters = newCenters
+            currentWeightedCenters = applyLightnessWeighting(currentCenters, weight: Float(lightnessWeight))
+
+            // Generate visualization for this merge step
+            let newPixelClusters = SuperpixelProcessor.mapClustersToPixels(
+                clusterAssignments: currentAssignments,
+                superpixelData: superpixelData
+            )
+
+            // Create unweighted visualization
+            let vizPixelData = KMeansProcessor.visualizeClusters(
+                pixelClusters: newPixelClusters,
+                clusterCenters: currentCenters,
+                width: result.width,
+                height: result.height,
+                greenAxisScale: Float(greenAxisScale)
+            )
+            let vizImage = createCGImage(from: vizPixelData, width: result.width, height: result.height).flatMap {
+                NSImage(cgImage: $0, size: NSSize(width: result.width, height: result.height))
+            }
+
+            // Create weighted visualization
+            var weightedVizImage: NSImage? = nil
+            if useWeightedColors {
+                let weightedVizPixelData = KMeansProcessor.visualizeClusters(
+                    pixelClusters: newPixelClusters,
+                    clusterCenters: currentWeightedCenters,
+                    width: result.width,
+                    height: result.height,
+                    greenAxisScale: Float(greenAxisScale)
+                )
+                weightedVizImage = createCGImage(from: weightedVizPixelData, width: result.width, height: result.height).flatMap {
+                    NSImage(cgImage: $0, size: NSSize(width: result.width, height: result.height))
+                }
+            }
+
+            // Extract layers
+            let extractedLayers = LayerExtractor.extractLayers(
+                from: originalImage,
+                pixelClusters: newPixelClusters,
+                clusterCenters: currentCenters,
+                width: result.width,
+                height: result.height
+            )
+            let layerImages = extractedLayers.map { $0.image }
+
+            // Extract weighted layers
+            var weightedLayerImages: [NSImage] = []
+            if useWeightedColors, let weightedViz = weightedVizImage {
+                let weightedExtractedLayers = LayerExtractor.extractLayers(
+                    from: weightedViz,
+                    pixelClusters: newPixelClusters,
+                    clusterCenters: currentWeightedCenters,
+                    width: result.width,
+                    height: result.height
+                )
+                weightedLayerImages = weightedExtractedLayers.map { $0.image }
+            }
+
+            // Calculate cluster average colors
+            let avgColors = calculateTrueClusterAverageColors(
+                originalImage: originalImage,
+                pixelClusters: newPixelClusters,
+                numberOfClusters: currentCenters.count,
+                width: result.width,
+                height: result.height,
+                greenAxisScale: Float(greenAxisScale)
+            )
+            let weightedAvgColors = applyLightnessWeighting(avgColors, weight: Float(lightnessWeight))
+
+            // Create snapshot
+            let snapshot = MergeSnapshot(
+                stepNumber: stepNumber,
+                mergedClusterA: clusterA,
+                mergedClusterB: clusterB,
+                weightedDistance: weightedDist,
+                unweightedDistance: unweightedDist,
+                clusterCenters: currentCenters,
+                weightedClusterCenters: currentWeightedCenters,
+                clusterAverageColors: avgColors,
+                weightedClusterAverageColors: weightedAvgColors,
+                clusterDistances: calculateClusterDistances(currentCenters),
+                weightedClusterDistances: calculateClusterDistances(currentWeightedCenters),
+                layerImages: layerImages,
+                weightedLayerImages: weightedLayerImages,
+                visualizationImage: vizImage ?? NSImage(),
+                weightedVisualizationImage: weightedVizImage
+            )
+
+            mergeSnapshots.append(snapshot)
+
+            // Update main display with latest merged state
+            self.clusterCenters = currentCenters
+            self.weightedClusterCenters = currentWeightedCenters
+            self.clusterAverageColors = avgColors
+            self.weightedClusterAverageColors = weightedAvgColors
+            self.layerImages = layerImages
+            self.weightedLayerImages = weightedLayerImages
+            self.kmeansImage = vizImage
+            self.weightedKmeansImage = weightedVizImage
+            self.pixelClusters = newPixelClusters
+            self.clusterDistances = calculateClusterDistances(currentCenters)
+            self.weightedClusterDistances = calculateClusterDistances(currentWeightedCenters)
+        }
+
+        print("Auto-combine complete: \(stepNumber) merges performed")
+    }
+
+    /// Reset to original cluster state before any merges
+    private func resetToOriginalClusters() {
+        guard let originalResult = originalClusterResult,
+              let result = lastProcessingResult,
+              let superpixelData = debugSuperpixelData,
+              let originalImage = originalImage else {
+            errorMessage = "No original cluster state to reset to"
+            return
+        }
+
+        // Restore original cluster assignments
+        let restoredPixelClusters = SuperpixelProcessor.mapClustersToPixels(
+            clusterAssignments: originalResult.clusterAssignments,
+            superpixelData: superpixelData
+        )
+
+        // Recreate visualizations
+        let vizPixelData = KMeansProcessor.visualizeClusters(
+            pixelClusters: restoredPixelClusters,
+            clusterCenters: originalResult.clusterCenters,
+            width: result.width,
+            height: result.height,
+            greenAxisScale: Float(greenAxisScale)
+        )
+        let vizImage = createCGImage(from: vizPixelData, width: result.width, height: result.height).flatMap {
+            NSImage(cgImage: $0, size: NSSize(width: result.width, height: result.height))
+        }
+
+        var weightedVizImage: NSImage? = nil
+        let weightedCenters = applyLightnessWeighting(originalResult.clusterCenters, weight: Float(lightnessWeight))
+        if useWeightedColors {
+            let weightedVizPixelData = KMeansProcessor.visualizeClusters(
+                pixelClusters: restoredPixelClusters,
+                clusterCenters: weightedCenters,
+                width: result.width,
+                height: result.height,
+                greenAxisScale: Float(greenAxisScale)
+            )
+            weightedVizImage = createCGImage(from: weightedVizPixelData, width: result.width, height: result.height).flatMap {
+                NSImage(cgImage: $0, size: NSSize(width: result.width, height: result.height))
+            }
+        }
+
+        // Extract layers
+        let extractedLayers = LayerExtractor.extractLayers(
+            from: originalImage,
+            pixelClusters: restoredPixelClusters,
+            clusterCenters: originalResult.clusterCenters,
+            width: result.width,
+            height: result.height
+        )
+        let layerImages = extractedLayers.map { $0.image }
+
+        var weightedLayerImages: [NSImage] = []
+        if useWeightedColors, let weightedViz = weightedVizImage {
+            let weightedExtractedLayers = LayerExtractor.extractLayers(
+                from: weightedViz,
+                pixelClusters: restoredPixelClusters,
+                clusterCenters: weightedCenters,
+                width: result.width,
+                height: result.height
+            )
+            weightedLayerImages = weightedExtractedLayers.map { $0.image }
+        }
+
+        // Calculate cluster average colors
+        let avgColors = calculateTrueClusterAverageColors(
+            originalImage: originalImage,
+            pixelClusters: restoredPixelClusters,
+            numberOfClusters: originalResult.clusterCenters.count,
+            width: result.width,
+            height: result.height,
+            greenAxisScale: Float(greenAxisScale)
+        )
+        let weightedAvgColors = applyLightnessWeighting(avgColors, weight: Float(lightnessWeight))
+
+        // Update state
+        self.clusterCenters = originalResult.clusterCenters
+        self.weightedClusterCenters = weightedCenters
+        self.clusterAverageColors = avgColors
+        self.weightedClusterAverageColors = weightedAvgColors
+        self.layerImages = layerImages
+        self.weightedLayerImages = weightedLayerImages
+        self.kmeansImage = vizImage
+        self.weightedKmeansImage = weightedVizImage
+        self.pixelClusters = restoredPixelClusters
+        self.clusterDistances = calculateClusterDistances(originalResult.clusterCenters)
+        self.weightedClusterDistances = calculateClusterDistances(weightedCenters)
+        self.mergeSnapshots.removeAll()
+
+        print("Reset to original \(originalResult.numberOfClusters) clusters")
     }
 }
 

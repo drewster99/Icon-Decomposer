@@ -479,7 +479,7 @@ struct ContentView: View {
                                         if layerIndex < clusterAverageColors.count {
                                             let avgColor = clusterAverageColors[layerIndex]
                                             ColorSwatchView(
-                                                topLabel: "Average",
+                                                topLabel: "Pixels",
                                                 labColor: avgColor,
                                                 bottomLabel: "LAB",
                                                 greenAxisScale: Float(greenAxisScale)
@@ -584,18 +584,18 @@ struct ContentView: View {
                                                 )
                                             }
 
-                                            // Cluster average color swatch (UNweighted - to compare with weighted center)
-                                            if layerIndex < clusterAverageColors.count {
-                                                let avgColor = clusterAverageColors[layerIndex]
+                                            // Cluster average color swatch (weighted)
+                                            if layerIndex < weightedClusterAverageColors.count {
+                                                let avgColor = weightedClusterAverageColors[layerIndex]
                                                 ColorSwatchView(
-                                                    topLabel: "Average",
+                                                    topLabel: "Pixels",
                                                     labColor: avgColor,
                                                     bottomLabel: "LAB",
                                                     greenAxisScale: Float(greenAxisScale)
                                                 )
                                                 .padding(.top, 10)
 
-                                                // Distance between weighted center and unweighted average
+                                                // Distance between weighted center and weighted average
                                                 if layerIndex < weightedClusterCenters.count {
                                                     let center = weightedClusterCenters[layerIndex]
                                                     let diff = center - avgColor
@@ -1085,9 +1085,16 @@ struct ContentView: View {
                         self.weightedClusterCenters = self.applyLightnessWeighting(self.clusterCenters, weight: Float(self.lightnessWeight))
                     }
 
-                    // Calculate cluster average colors from superpixels
-                    if let spData = debugSuperpixelData, let clResult = debugClusterResult {
-                        self.clusterAverageColors = self.calculateClusterAverageColors(superpixelData: spData, clusterResult: clResult)
+                    // Calculate cluster average colors from original image pixels
+                    if let clResult = debugClusterResult, !debugPixelClusters.isEmpty {
+                        self.clusterAverageColors = self.calculateTrueClusterAverageColors(
+                            originalImage: image,
+                            pixelClusters: debugPixelClusters,
+                            numberOfClusters: clResult.numberOfClusters,
+                            width: result.width,
+                            height: result.height,
+                            greenAxisScale: Float(self.greenAxisScale)
+                        )
                         self.weightedClusterAverageColors = self.applyLightnessWeighting(self.clusterAverageColors, weight: Float(self.lightnessWeight))
                     }
 
@@ -1332,6 +1339,138 @@ struct ContentView: View {
             } else {
                 // Empty cluster - use cluster center as fallback
                 averages.append(clusterResult.clusterCenters[i])
+            }
+        }
+
+        return averages
+    }
+
+    /// Convert RGB (0-1 range) to LAB color space
+    private func rgbToLab(_ r: Float, _ g: Float, _ b: Float, greenAxisScale: Float) -> SIMD3<Float> {
+        // Inverse gamma correction (sRGB to linear RGB)
+        func invGamma(_ c: Float) -> Float {
+            return c <= 0.04045 ? c / 12.92 : pow((c + 0.055) / 1.055, 2.4)
+        }
+
+        let rLinear = invGamma(r)
+        let gLinear = invGamma(g)
+        let bLinear = invGamma(b)
+
+        // Linear RGB to XYZ (D65 illuminant)
+        let x = rLinear * 0.4124 + gLinear * 0.3576 + bLinear * 0.1805
+        let y = rLinear * 0.2126 + gLinear * 0.7152 + bLinear * 0.0722
+        let z = rLinear * 0.0193 + gLinear * 0.1192 + bLinear * 0.9505
+
+        // XYZ to LAB
+        let xn: Float = 0.95047
+        let yn: Float = 1.00000
+        let zn: Float = 1.08883
+
+        func f(_ t: Float) -> Float {
+            let delta: Float = 6.0 / 29.0
+            return t > delta * delta * delta ? pow(t, 1.0/3.0) : t / (3.0 * delta * delta) + 4.0 / 29.0
+        }
+
+        let fx = f(x / xn)
+        let fy = f(y / yn)
+        let fz = f(z / zn)
+
+        let L = 116.0 * fy - 16.0
+        var a = 500.0 * (fx - fy)
+        let b = 200.0 * (fy - fz)
+
+        // Apply green axis scaling to negative 'a' values (matching SLIC processor behavior)
+        if a < 0 {
+            a *= greenAxisScale
+        }
+
+        return SIMD3<Float>(L, a, b)
+    }
+
+    /// Calculate true average LAB colors for each cluster from original image pixels
+    private func calculateTrueClusterAverageColors(
+        originalImage: NSImage,
+        pixelClusters: [UInt32],
+        numberOfClusters: Int,
+        width: Int,
+        height: Int,
+        greenAxisScale: Float
+    ) -> [SIMD3<Float>] {
+        // Extract pixel data from original image
+        guard let cgImage = originalImage.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            print("Failed to get CGImage for average color calculation")
+            return Array(repeating: SIMD3<Float>(0, 0, 0), count: numberOfClusters)
+        }
+
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        let imageData = UnsafeMutableRawPointer.allocate(byteCount: height * bytesPerRow, alignment: 1)
+        defer { imageData.deallocate() }
+
+        let colorSpace = CGColorSpaceCreateDeviceRGB()
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+
+        guard let context = CGContext(
+            data: imageData,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: bytesPerRow,
+            space: colorSpace,
+            bitmapInfo: bitmapInfo
+        ) else {
+            print("Failed to create CGContext for average color calculation")
+            return Array(repeating: SIMD3<Float>(0, 0, 0), count: numberOfClusters)
+        }
+
+        let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
+        context.clear(fullRect)
+        context.draw(cgImage, in: fullRect)
+
+        let pixels = imageData.bindMemory(to: UInt8.self, capacity: width * height * bytesPerPixel)
+
+        // Accumulate RGB values for each cluster
+        var clusterRGBSums = Array(repeating: SIMD3<Float>(0, 0, 0), count: numberOfClusters)
+        var clusterCounts = Array(repeating: 0, count: numberOfClusters)
+
+        for i in 0..<pixelClusters.count {
+            let clusterID = Int(pixelClusters[i])
+
+            // Skip transparent pixels (marked with special label)
+            let transparentLabel: UInt32 = 0xFFFFFFFE
+            if pixelClusters[i] == transparentLabel {
+                continue
+            }
+
+            // Ensure cluster ID is valid
+            guard clusterID < numberOfClusters else {
+                continue
+            }
+
+            // Get BGRA pixel values (premultiplied first + little endian)
+            let pixelOffset = i * bytesPerPixel
+            let b = Float(pixels[pixelOffset + 0]) / 255.0
+            let g = Float(pixels[pixelOffset + 1]) / 255.0
+            let r = Float(pixels[pixelOffset + 2]) / 255.0
+
+            // Accumulate RGB
+            clusterRGBSums[clusterID] += SIMD3<Float>(r, g, b)
+            clusterCounts[clusterID] += 1
+        }
+
+        // Calculate average RGB and convert to LAB for each cluster
+        var averages: [SIMD3<Float>] = []
+        for i in 0..<numberOfClusters {
+            if clusterCounts[i] > 0 {
+                // Average RGB values
+                let avgRGB = clusterRGBSums[i] / Float(clusterCounts[i])
+
+                // Convert to LAB
+                let lab = rgbToLab(avgRGB.x, avgRGB.y, avgRGB.z, greenAxisScale: greenAxisScale)
+                averages.append(lab)
+            } else {
+                // Empty cluster - use black as fallback
+                averages.append(SIMD3<Float>(0, 0, 0))
             }
         }
 

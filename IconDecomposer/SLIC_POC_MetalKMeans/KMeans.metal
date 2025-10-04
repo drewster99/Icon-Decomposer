@@ -198,20 +198,28 @@ kernel void findFarthestPoint(
     pointDistances[gid] = dist;
 }
 
-// Kernel for weighted color features (reducing L channel influence)
+// Kernel for weighted color features (reducing L channel influence and enhancing green separation)
 kernel void applyColorWeighting(
     device const float3* originalColors [[buffer(0)]],   // Original LAB colors
     device float3* weightedColors [[buffer(1)]],         // Output: weighted colors
     constant float& lightnessWeight [[buffer(2)]],       // Weight for L channel (e.g., 0.35)
-    constant KMeansParams& params [[buffer(3)]],
+    constant float& greenAxisScale [[buffer(3)]],        // Scale for negative a values (e.g., 2.0)
+    constant KMeansParams& params [[buffer(4)]],
     uint gid [[thread_position_in_grid]])
 {
     if (gid >= params.numPoints) return;
 
     float3 color = originalColors[gid];
+    float a = color.y;
+
+    // Apply green axis scaling to negative 'a' values
+    if (a < 0.0) {
+        a *= greenAxisScale;
+    }
+
     weightedColors[gid] = float3(
         color.x * lightnessWeight,  // L channel weighted
-        color.y,                     // a channel unchanged
+        a,                           // a channel with green scaling applied
         color.z                      // b channel unchanged
     );
 }

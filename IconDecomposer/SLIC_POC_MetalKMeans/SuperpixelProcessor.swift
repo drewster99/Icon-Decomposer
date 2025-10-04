@@ -341,24 +341,6 @@ class SuperpixelProcessor {
         return superpixelData.superpixels.map { $0.labColor }
     }
 
-    /// Create weighted LAB colors with reduced lightness influence
-    /// - Parameters:
-    ///   - superpixelData: Processed superpixel data
-    ///   - lightnessWeight: Weight for L channel (default 0.35)
-    /// - Returns: Array of weighted LAB colors
-    static func extractWeightedColorFeatures(
-        from superpixelData: SuperpixelData,
-        lightnessWeight: Float = 0.35
-    ) -> [SIMD3<Float>] {
-        return superpixelData.superpixels.map { superpixel in
-            SIMD3<Float>(
-                superpixel.labColor.x * lightnessWeight,  // L channel
-                superpixel.labColor.y,                     // a channel
-                superpixel.labColor.z                      // b channel
-            )
-        }
-    }
-
     /// Map cluster assignments back to pixel labels
     /// - Parameters:
     ///   - clusterAssignments: Cluster ID for each superpixel
@@ -391,9 +373,9 @@ class SuperpixelProcessor {
     /// Visualize superpixels by filling each with its average LAB color
     /// - Parameters:
     ///   - superpixelData: Processed superpixel data
-    ///   - greenAxisScale: Scale factor for negative 'a' values (default 2.0)
+    ///   - greenAxisScale: Scale factor for negative 'a' values
     /// - Returns: NSImage where each superpixel shows its average color
-    static func visualizeSuperpixelAverageColors(superpixelData: SuperpixelData, greenAxisScale: Float = 2.0) -> NSImage {
+    static func visualizeSuperpixelAverageColors(superpixelData: SuperpixelData, greenAxisScale: Float) -> NSImage {
         let width = superpixelData.imageWidth
         let height = superpixelData.imageHeight
 
@@ -464,7 +446,7 @@ class SuperpixelProcessor {
     }
 
     /// Convert LAB color to RGB (same as KMeansProcessor)
-    private static func labToRGB(_ lab: SIMD3<Float>, greenAxisScale: Float = 2.0) -> SIMD3<Float> {
+    private static func labToRGB(_ lab: SIMD3<Float>, greenAxisScale: Float) -> SIMD3<Float> {
         // Reverse green axis scaling if 'a' was scaled during RGB→LAB conversion
         let a = lab.y < 0 ? lab.y / greenAxisScale : lab.y
 

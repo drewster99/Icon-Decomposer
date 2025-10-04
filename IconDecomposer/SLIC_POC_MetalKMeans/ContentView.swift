@@ -1037,7 +1037,7 @@ struct ContentView: View {
             topLabel: String? = nil,
             labColor: SIMD3<Float>,
             bottomLabel: String? = nil,
-            greenAxisScale: Float = 2.0,
+            greenAxisScale: Float,
             swatchSize: CGFloat = 50
         ) {
             self.topLabel = topLabel
@@ -1257,7 +1257,8 @@ struct ContentView: View {
                     let kmeansParams = KMeansProcessor.Parameters(
                         numberOfClusters: Int(self.nClusters),
                         useWeightedColors: self.useWeightedColors,
-                        lightnessWeight: Float(self.lightnessWeight)
+                        lightnessWeight: Float(self.lightnessWeight),
+                        greenAxisScale: Float(self.greenAxisScale)
                     )
 
                     let clusterResult = KMeansProcessor.cluster(
@@ -1311,7 +1312,7 @@ struct ContentView: View {
 
                     // Create weighted visualization
                     if self.useWeightedColors {
-                        let weightedCenters = self.applyLightnessWeighting(clusterResult.clusterCenters, weight: Float(self.lightnessWeight))
+                        let weightedCenters = self.applyLightnessWeighting(clusterResult.clusterCenters, weight: Float(self.lightnessWeight), greenAxisScale: Float(self.greenAxisScale))
                         let weightedPixelData = KMeansProcessor.visualizeClusters(
                             pixelClusters: pixelClusters,
                             clusterCenters: weightedCenters,
@@ -1342,7 +1343,7 @@ struct ContentView: View {
 
                         // Extract layers using weighted cluster centers
                         if self.useWeightedColors, let weightedVizImage = weightedKmeansNSImage {
-                            let weightedCenters = self.applyLightnessWeighting(clusterResult.clusterCenters, weight: Float(self.lightnessWeight))
+                            let weightedCenters = self.applyLightnessWeighting(clusterResult.clusterCenters, weight: Float(self.lightnessWeight), greenAxisScale: Float(self.greenAxisScale))
                             let weightedExtractedLayers = LayerExtractor.extractLayers(
                                 from: weightedVizImage,  // Use weighted visualization, not original image
                                 pixelClusters: pixelClusters,
@@ -1378,7 +1379,7 @@ struct ContentView: View {
                     if let weightedCenters = debugClusterResult?.weightedCentersBeforeRecalc {
                         self.weightedClusterCenters = weightedCenters
                     } else {
-                        self.weightedClusterCenters = self.applyLightnessWeighting(self.clusterCenters, weight: Float(self.lightnessWeight))
+                        self.weightedClusterCenters = self.applyLightnessWeighting(self.clusterCenters, weight: Float(self.lightnessWeight), greenAxisScale: Float(self.greenAxisScale))
                     }
 
                     // Calculate cluster average colors from original image pixels
@@ -1391,7 +1392,7 @@ struct ContentView: View {
                             height: result.height,
                             greenAxisScale: Float(self.greenAxisScale)
                         )
-                        self.weightedClusterAverageColors = self.applyLightnessWeighting(self.clusterAverageColors, weight: Float(self.lightnessWeight))
+                        self.weightedClusterAverageColors = self.applyLightnessWeighting(self.clusterAverageColors, weight: Float(self.lightnessWeight), greenAxisScale: Float(self.greenAxisScale))
                     }
 
                     self.clusterDistances = self.calculateClusterDistances(self.clusterCenters)
@@ -1607,10 +1608,15 @@ struct ContentView: View {
         return compositeImage
     }
 
-    /// Apply lightness weighting to cluster centers
-    private func applyLightnessWeighting(_ centers: [SIMD3<Float>], weight: Float) -> [SIMD3<Float>] {
+    /// Apply lightness weighting and green axis scaling to cluster centers
+    private func applyLightnessWeighting(_ centers: [SIMD3<Float>], weight: Float, greenAxisScale: Float) -> [SIMD3<Float>] {
         return centers.map { center in
-            SIMD3<Float>(center.x * weight, center.y, center.z)
+            var a = center.y
+            // Apply green axis scaling to negative 'a' values
+            if a < 0 {
+                a *= greenAxisScale
+            }
+            return SIMD3<Float>(center.x * weight, a, center.z)
         }
     }
 
@@ -1824,7 +1830,7 @@ struct ContentView: View {
     }
 
     /// Convert LAB color to NSColor for SwiftUI display
-    private func labToNSColor(_ lab: SIMD3<Float>, greenAxisScale: Float = 2.0) -> NSColor {
+    private func labToNSColor(_ lab: SIMD3<Float>, greenAxisScale: Float) -> NSColor {
         // Reverse green axis scaling if 'a' was scaled during RGB→LAB conversion
         let a = lab.y < 0 ? lab.y / greenAxisScale : lab.y
 
@@ -1976,7 +1982,7 @@ struct ContentView: View {
         // Start with current cluster state
         var currentAssignments = clusterResult.clusterAssignments
         var currentCenters = clusterResult.clusterCenters
-        var currentWeightedCenters = applyLightnessWeighting(currentCenters, weight: Float(lightnessWeight))
+        var currentWeightedCenters = applyLightnessWeighting(currentCenters, weight: Float(lightnessWeight), greenAxisScale: Float(greenAxisScale))
         var stepNumber = 0
 
         mergeSnapshots.removeAll()
@@ -2011,7 +2017,7 @@ struct ContentView: View {
 
             currentAssignments = newAssignments
             currentCenters = newCenters
-            currentWeightedCenters = applyLightnessWeighting(currentCenters, weight: Float(lightnessWeight))
+            currentWeightedCenters = applyLightnessWeighting(currentCenters, weight: Float(lightnessWeight), greenAxisScale: Float(greenAxisScale))
 
             // Generate visualization for this merge step
             let newPixelClusters = SuperpixelProcessor.mapClustersToPixels(
@@ -2078,7 +2084,7 @@ struct ContentView: View {
                 height: result.height,
                 greenAxisScale: Float(greenAxisScale)
             )
-            let weightedAvgColors = applyLightnessWeighting(avgColors, weight: Float(lightnessWeight))
+            let weightedAvgColors = applyLightnessWeighting(avgColors, weight: Float(lightnessWeight), greenAxisScale: Float(greenAxisScale))
 
             // Create snapshot
             let snapshot = MergeSnapshot(
@@ -2147,7 +2153,7 @@ struct ContentView: View {
         }
 
         var weightedVizImage: NSImage? = nil
-        let weightedCenters = applyLightnessWeighting(originalResult.clusterCenters, weight: Float(lightnessWeight))
+        let weightedCenters = applyLightnessWeighting(originalResult.clusterCenters, weight: Float(lightnessWeight), greenAxisScale: Float(greenAxisScale))
         if useWeightedColors {
             let weightedVizPixelData = KMeansProcessor.visualizeClusters(
                 pixelClusters: restoredPixelClusters,
@@ -2192,7 +2198,7 @@ struct ContentView: View {
             height: result.height,
             greenAxisScale: Float(greenAxisScale)
         )
-        let weightedAvgColors = applyLightnessWeighting(avgColors, weight: Float(lightnessWeight))
+        let weightedAvgColors = applyLightnessWeighting(avgColors, weight: Float(lightnessWeight), greenAxisScale: Float(greenAxisScale))
 
         // Update state
         self.clusterCenters = originalResult.clusterCenters

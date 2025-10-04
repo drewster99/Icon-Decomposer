@@ -41,19 +41,22 @@ class KMeansProcessor {
         let convergenceDistance: Float
         let useWeightedColors: Bool
         let lightnessWeight: Float
+        let greenAxisScale: Float
 
         init(
             numberOfClusters: Int = 5,
             maxIterations: Int = 300,
             convergenceDistance: Float = 0.01,
             useWeightedColors: Bool = true,
-            lightnessWeight: Float = 0.35
+            lightnessWeight: Float,
+            greenAxisScale: Float
         ) {
             self.numberOfClusters = numberOfClusters
             self.maxIterations = maxIterations
             self.convergenceDistance = convergenceDistance
             self.useWeightedColors = useWeightedColors
             self.lightnessWeight = lightnessWeight
+            self.greenAxisScale = greenAxisScale
         }
     }
 
@@ -106,6 +109,7 @@ class KMeansProcessor {
         print("Using weighted colors: \(parameters.useWeightedColors)")
         if parameters.useWeightedColors {
             print("Lightness weight: \(parameters.lightnessWeight)")
+            print("Green axis scale: \(parameters.greenAxisScale)")
         }
 
         let totalStartTime = CFAbsoluteTimeGetCurrent()
@@ -123,6 +127,7 @@ class KMeansProcessor {
             colorsBuffer = applyWeighting(
                 originalColors: originalColorsBuffer,
                 lightnessWeight: parameters.lightnessWeight,
+                greenAxisScale: parameters.greenAxisScale,
                 numPoints: numPoints
             )
         } else {
@@ -271,7 +276,8 @@ class KMeansProcessor {
                 pixelClusters: pixelClusters,
                 clusterCenters: currentCenters,
                 width: imageWidth,
-                height: imageHeight
+                height: imageHeight,
+                greenAxisScale: parameters.greenAxisScale
             )
 
             // Extract layers for this iteration
@@ -465,6 +471,7 @@ class KMeansProcessor {
     private static func applyWeighting(
         originalColors: MTLBuffer,
         lightnessWeight: Float,
+        greenAxisScale: Float,
         numPoints: Int
     ) -> MTLBuffer {
 
@@ -488,7 +495,9 @@ class KMeansProcessor {
         encoder.setBuffer(weightedColorsBuffer, offset: 0, index: 1)
         var weight = lightnessWeight
         encoder.setBytes(&weight, length: MemoryLayout<Float>.size, index: 2)
-        encoder.setBytes(&params, length: MemoryLayout<KMeansParams>.size, index: 3)
+        var greenScale = greenAxisScale
+        encoder.setBytes(&greenScale, length: MemoryLayout<Float>.size, index: 3)
+        encoder.setBytes(&params, length: MemoryLayout<KMeansParams>.size, index: 4)
 
         let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
         let threadgroupsPerGrid = MTLSize(
@@ -833,13 +842,14 @@ class KMeansProcessor {
     ///   - clusterCenters: LAB color centers for each cluster
     ///   - width: Image width
     ///   - height: Image height
+    ///   - greenAxisScale: Scale factor for negative 'a' values in LAB
     /// - Returns: BGRA pixel data for visualization
     static func visualizeClusters(
         pixelClusters: [UInt32],
         clusterCenters: [SIMD3<Float>],
         width: Int,
         height: Int,
-        greenAxisScale: Float = 2.0
+        greenAxisScale: Float
     ) -> Data {
 
         // Debug: print cluster centers
@@ -880,7 +890,7 @@ class KMeansProcessor {
     }
 
     /// Convert LAB color to RGB
-    private static func labToRGB(_ lab: SIMD3<Float>, greenAxisScale: Float = 2.0) -> SIMD3<Float> {
+    private static func labToRGB(_ lab: SIMD3<Float>, greenAxisScale: Float) -> SIMD3<Float> {
         // Reverse green axis scaling if 'a' was scaled during RGB→LAB conversion
         let a = lab.y < 0 ? lab.y / greenAxisScale : lab.y
 

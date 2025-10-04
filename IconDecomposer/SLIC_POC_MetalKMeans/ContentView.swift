@@ -1424,7 +1424,9 @@ struct ContentView: View {
         }
 
         let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
-        context.clear(fullRect)
+        // Fill with white to composite semi-transparent pixels over white background
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(fullRect)
         context.draw(cgImage, in: fullRect)
 
         let pixels = imageData.bindMemory(to: UInt8.self, capacity: width * height * bytesPerPixel)

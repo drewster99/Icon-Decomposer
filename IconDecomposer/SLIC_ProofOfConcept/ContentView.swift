@@ -50,7 +50,7 @@ struct ContentView: View {
     @State private var layerImages: [NSImage] = []
 
     // Test image names (will be added to Assets.xcassets)
-    let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4"]
+    let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4", "TestIcon5", "TestIcon6", "TestIcon7"]
 
     // SLIC parameters (matching Python defaults)
     @State private var nSegments: Double = 1000

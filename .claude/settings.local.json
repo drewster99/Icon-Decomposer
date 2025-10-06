@@ -29,7 +29,13 @@
       "mcp__xcode-mcp-server__take_app_screenshot",
       "mcp__xcode-mcp-server__list_running_mac_apps",
       "Read(//Users/andrew/Library/Developer/Xcode/DerivedData/**)",
-      "Read(//tmp/xcode-mcp-server/screenshots/**)"
+      "Read(//tmp/xcode-mcp-server/screenshots/**)",
+      "mcp__xcode-mcp-server__run_project_with_user_interaction",
+      "Read(//tmp/xcode-mcp-server/logs/**)",
+      "Bash(mcp__xcode-mcp-server__build_project:*)",
+      "Read(///**)",
+      "Bash(awk:*)",
+      "Bash(cat:*)"
     ],
     "deny": [],
     "ask": []

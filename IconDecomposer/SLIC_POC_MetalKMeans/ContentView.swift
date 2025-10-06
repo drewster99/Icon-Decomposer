@@ -108,7 +108,8 @@ struct ContentView: View {
     @State private var mergeSnapshots: [MergeSnapshot] = []
 
     // Test image names (will be added to Assets.xcassets)
-    let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4"]
+    let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4", "TestIcon5", "TestIcon6", "TestIcon7"]
+
 
     // SLIC parameters (matching Python defaults)
     @State private var nSegments: Double = 1000
@@ -373,19 +374,20 @@ struct ContentView: View {
                         .font(.headline)
                         .padding(.horizontal)
 
-                    HStack(alignment: .top, spacing: 15) {
-                        ForEach(Array(clusterCenters.enumerated()), id: \.offset) { index, center in
-                            ColorSwatchView(
-                                topLabel: "Cluster \(index)",
-                                labColor: center,
-                                bottomLabel: "LAB",
-                                greenAxisScale: Float(greenAxisScale),
-                                swatchSize: 60
-                            )
+                    ScrollView(.horizontal) {
+                        HStack(alignment: .top, spacing: 15) {
+                            ForEach(Array(clusterCenters.enumerated()), id: \.offset) { index, center in
+                                ColorSwatchView(
+                                    topLabel: "Cluster \(index)",
+                                    labColor: center,
+                                    bottomLabel: "LAB",
+                                    greenAxisScale: Float(greenAxisScale),
+                                    swatchSize: 60
+                                )
+                            }
                         }
-                        Spacer()
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
                 }
             }
 
@@ -1925,7 +1927,7 @@ struct ContentView: View {
         clusterAssignments: [Int]
     ) -> (newAssignments: [Int], newCenters: [SIMD3<Float>]) {
         // Remap cluster B to cluster A
-        var newAssignments = clusterAssignments.map { assignment in
+        let newAssignments = clusterAssignments.map { assignment in
             if assignment == clusterB {
                 return clusterA
             } else if assignment > clusterB {

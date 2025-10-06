@@ -37,12 +37,16 @@ public struct MetalResources {
         if let library = library {
             self.library = library
         } else {
-            let slicSource = try Self.loadMetalShader(named: "SLIC")
-            let kmeansSource = try Self.loadMetalShader(named: "KMeans")
-            let combined = slicSource + "\n" + kmeansSource
-
-            // Synchronous compilation (blocks thread)
-            self.library = try self.device.makeLibrary(source: combined, options: nil)
+            // Try loading pre-compiled metallib first (from SPM package resources)
+            if let library = try? Self.loadPrecompiledLibrary(device: self.device) {
+                self.library = library
+            } else {
+                // Fall back to runtime compilation from source
+                let slicSource = try Self.loadMetalShader(named: "SLIC")
+                let kmeansSource = try Self.loadMetalShader(named: "KMeans")
+                let combined = slicSource + "\n" + kmeansSource
+                self.library = try self.device.makeLibrary(source: combined, options: nil)
+            }
         }
     }
 
@@ -65,16 +69,37 @@ public struct MetalResources {
         if let library = library {
             self.library = library
         } else {
-            let slicSource = try Self.loadMetalShader(named: "SLIC")
-            let kmeansSource = try Self.loadMetalShader(named: "KMeans")
-            let combined = slicSource + "\n" + kmeansSource
-
-            // Asynchronous compilation (doesn't block)
-            self.library = try await self.device.makeLibrary(source: combined, options: nil)
+            // Try loading pre-compiled metallib first (from SPM package resources)
+            if let library = try? Self.loadPrecompiledLibrary(device: self.device) {
+                self.library = library
+            } else {
+                // Fall back to runtime compilation from source
+                let slicSource = try Self.loadMetalShader(named: "SLIC")
+                let kmeansSource = try Self.loadMetalShader(named: "KMeans")
+                let combined = slicSource + "\n" + kmeansSource
+                self.library = try await self.device.makeLibrary(source: combined, options: nil)
+            }
         }
     }
 
     // MARK: - Shader Loading
+
+    /// Load pre-compiled Metal library from bundle (for SPM package resources)
+    private static func loadPrecompiledLibrary(device: MTLDevice) throws -> MTLLibrary? {
+        // Try Bundle.module first (SPM)
+        if let library = try? device.makeDefaultLibrary(bundle: Bundle.module) {
+            return library
+        }
+
+        // Try all bundles for the default.metallib
+        for bundle in Bundle.allBundles {
+            if let library = try? device.makeDefaultLibrary(bundle: bundle) {
+                return library
+            }
+        }
+
+        return nil
+    }
 
     /// Load Metal shader source from bundle with multi-location search for Xcode compatibility
     private static func loadMetalShader(named name: String) throws -> String {

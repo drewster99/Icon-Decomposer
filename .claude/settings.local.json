@@ -25,7 +25,11 @@
       "Bash(swift run:*)",
       "Bash(swift build:*)",
       "Bash(swift package:*)",
-      "Read(//Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Metal.framework/Versions/A/Headers/**)"
+      "Read(//Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Metal.framework/Versions/A/Headers/**)",
+      "mcp__xcode-mcp-server__take_app_screenshot",
+      "mcp__xcode-mcp-server__list_running_mac_apps",
+      "Read(//Users/andrew/Library/Developer/Xcode/DerivedData/**)",
+      "Read(//tmp/xcode-mcp-server/screenshots/**)"
     ],
     "deny": [],
     "ask": []

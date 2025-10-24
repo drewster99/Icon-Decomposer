@@ -34,6 +34,84 @@ A web-based tool for decomposing app icons (1024x1024 PNG/JPG) into separate col
 - **Frontend**: Vanilla JavaScript, HTML5, CSS3
 - **Processing**: SLIC superpixels + K-means in LAB color space
 - **Export**: ZIP generation with selected layers only
+- **macOS Targets**: Swift/Metal implementations for native performance
+
+## macOS Metal Implementation
+
+### Architecture
+Two Xcode targets demonstrating different K-means implementations:
+1. **SLIC_ProofOfConcept**: Uses SwiftKMeansPlusPlus package (CPU-based SIMD)
+2. **SLIC_POC_MetalKMeans**: Custom Metal GPU implementation
+
+Both targets share:
+- Metal-accelerated SLIC superpixel segmentation
+- SuperpixelProcessor for feature extraction
+- LayerExtractor for separating clustered regions into individual layers
+
+### Performance Comparison (1024×1024 image, 1024 superpixels, 5 clusters)
+
+#### Total Pipeline Breakdown (Latest)
+| Stage | SwiftKMeansPlusPlus | Metal K-means (Initial) | **Metal K-means (Optimized)** | Final Improvement |
+|-------|---------------------|-------------------------|-------------------------------|-------------------|
+| SLIC Processing | 43ms | 43ms | **37ms** | 1.16x faster |
+| Extract Superpixels | 880ms (50%) | 921ms (53%) | **2.4ms (0.2%)** | **366x faster** |
+| **K-means Clustering** | **56ms (3%)** | **18ms (1%)** | **9ms (0.9%)** | **6.2x faster** |
+| Map to Pixels | 108ms (6%) | 108ms (6%) | **115ms (11%)** | Similar |
+| Create Visualization | 155ms (9%) | 151ms (9%) | **150ms (15%)** | Similar |
+| Extract Layers | 557ms (32%) | 552ms (32%) | **725ms (72%)** | Slower (more clusters) |
+| **TOTAL PIPELINE** | **1757ms** | **1750ms** | **1001ms** | **1.75x faster overall** |
+
+#### Extract Superpixels Optimization Details
+The dramatic 366x speedup (921ms → 2.4ms) was achieved by:
+1. **Eliminated Set creation from full labelMap** (65ms saved): Instead scan pixelCounts array to build uniqueLabels
+2. **Optimized labelMap creation** (31ms saved): Use `Array(UnsafeBufferPointer)` instead of element-by-element copy
+3. **Kept GPU accumulation** (already optimized at 1.2ms)
+
+**Timing breakdown of 2.4ms:**
+- Find maxLabel (CPU scan): 0.44ms
+- Create/zero buffers: 0.03ms
+- GPU accumulate: 1.20ms
+- Create Superpixel objects: 0.49ms
+- Build labelMap: 0.14ms
+
+#### Key Insights
+- **Metal K-means is 6.2x faster** than SwiftKMeansPlusPlus (56ms → 9ms)
+  - Further optimizations in iteration convergence
+- **Extract superpixels: 366x speedup** (921ms → 2.4ms)
+  - GPU parallel accumulation + eliminated CPU overhead
+- **New bottleneck: Extract layers at 72%** of pipeline time
+  - This is now the primary optimization target
+- **Overall pipeline: 1.75x faster** (1757ms → 1001ms)
+
+#### Metal K-means Implementation Details
+- **Algorithm**: K-means++ initialization with D² sampling
+- **Convergence**: 4-9 iterations typical (vs SwiftKMeansPlusPlus's fixed iteration count)
+- **GPU Kernels**:
+  - `calculateMinDistances`: Find nearest center for K-means++ sampling
+  - `calculateDistanceSquaredProbabilities`: Compute D² probabilities
+  - `assignPointsToClusters`: Assign each point to nearest cluster
+  - `accumulateClusterData`: Simple atomic accumulation (direct `atomic_fetch_add`)
+  - `updateClusterCenters`: Calculate new centers as mean of assigned points
+  - `checkConvergence`: Sum center movement deltas
+- **Debug vs Release**:
+  - Debug: `waitUntilCompleted()` after each kernel for timing breakdowns
+  - Release: Single sync at end for GPU pipelining
+- **Memory**: Shared buffers for CPU/GPU interop, flat float arrays for atomic operations
+
+#### Lessons Learned
+1. **Simple atomics work best**: Direct `atomic_fetch_add` outperformed complex threadgroup reductions with CAS loops
+2. **Over-optimization backfires**: Initial 100x slowdown from complex atomic patterns
+3. **Identify true bottlenecks**: Profiling revealed CPU overhead (Set creation, array copying) dominated GPU kernel time
+4. **Eliminate unnecessary work**: Scanning 1024 pixelCounts is 1000x faster than hashing 1M labels into a Set
+5. **Use optimized array constructors**: `Array(UnsafeBufferPointer)` is vastly faster than element-by-element copy
+6. **GPU parallelism needs proper sync**: Release builds will benefit from removing intermediate waits
+
+#### Future Optimizations
+To improve overall pipeline performance:
+1. ~~Move superpixel extraction to GPU~~ ✅ **DONE** (921ms → 2.4ms, 366x speedup)
+2. **GPU-accelerate layer extraction** (725ms, 72% of time) - PRIMARY TARGET
+3. Optimize "Map to Pixels" (115ms, 11% of time)
+4. Combined Metal compute passes to reduce CPU/GPU sync points
 
 ## Default Settings
 - Number of Layers: 4

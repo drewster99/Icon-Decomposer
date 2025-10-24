@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__xcode-mcp-server__get_xcode_projects",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "mcp__xcode-mcp-server__get_project_hierarchy",
+      "mcp__xcode-mcp-server__build_project",
+      "mcp__xcode-mcp-server__run_project",
+      "mcp__xcode-mcp-server__get_runtime_output",
+      "Bash(say:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "mcp__xcode-mcp-server__get_project_schemes",
+      "mcp__xcode-mcp-server__get_build_errors",
+      "WebFetch(domain:stats.stackexchange.com)",
+      "Bash(git log:*)",
+      "mcp__xcode-mcp-server__clean_project",
+      "mcp__xcode-mcp-server__get_directory_tree",
+      "mcp__xcode-mcp-server__get_directory_listing",
+      "Bash(mkdir:*)",
+      "Bash(swift build)",
+      "Bash(swift test)",
+      "Bash(swift run:*)",
+      "Bash(swift build:*)",
+      "Bash(swift package:*)",
+      "Read(//Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks/Metal.framework/Versions/A/Headers/**)",
+      "mcp__xcode-mcp-server__take_app_screenshot",
+      "mcp__xcode-mcp-server__list_running_mac_apps",
+      "Read(//Users/andrew/Library/Developer/Xcode/DerivedData/**)",
+      "Read(//tmp/xcode-mcp-server/screenshots/**)",
+      "mcp__xcode-mcp-server__run_project_with_user_interaction",
+      "Read(//tmp/xcode-mcp-server/logs/**)",
+      "Bash(mcp__xcode-mcp-server__build_project:*)",
+      "Read(///**)",
+      "Bash(awk:*)",
+      "Bash(cat:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

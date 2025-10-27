@@ -8,18 +8,19 @@
 
 /* Begin PBXBuildFile section */
 		494EDE3D2E8CE8B900BD48FF /* SwiftKMeansPlusPlus in Frameworks */ = {isa = PBXBuildFile; productRef = 494EDE3C2E8CE8B900BD48FF /* SwiftKMeansPlusPlus */; };
+		49AB384E2EAEE31C00B40BB2 /* ImageColorSegmentation in Frameworks */ = {isa = PBXBuildFile; productRef = 49AB384D2EAEE31C00B40BB2 /* ImageColorSegmentation */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		494495862E8A08D10061A59E /* IconDecomposer.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = IconDecomposer.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		494495862E8A08D10061A59E /* Stratify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Stratify.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		494495982E8A08F80061A59E /* SLIC_ProofOfConcept.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SLIC_ProofOfConcept.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		494EDE442E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SLIC_POC_MetalKMeans.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		494495882E8A08D10061A59E /* IconDecomposer */ = {
+		494495882E8A08D10061A59E /* Stratify */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
-			path = IconDecomposer;
+			path = Stratify;
 			sourceTree = "<group>";
 		};
 		494495992E8A08F80061A59E /* SLIC_ProofOfConcept */ = {
@@ -39,6 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				49AB384E2EAEE31C00B40BB2 /* ImageColorSegmentation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -63,7 +65,7 @@
 		4944957D2E8A08D10061A59E = {
 			isa = PBXGroup;
 			children = (
-				494495882E8A08D10061A59E /* IconDecomposer */,
+				494495882E8A08D10061A59E /* Stratify */,
 				494495992E8A08F80061A59E /* SLIC_ProofOfConcept */,
 				494EDE452E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans */,
 				494495872E8A08D10061A59E /* Products */,
@@ -73,7 +75,7 @@
 		494495872E8A08D10061A59E /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				494495862E8A08D10061A59E /* IconDecomposer.app */,
+				494495862E8A08D10061A59E /* Stratify.app */,
 				494495982E8A08F80061A59E /* SLIC_ProofOfConcept.app */,
 				494EDE442E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans.app */,
 			);
@@ -83,9 +85,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		494495852E8A08D10061A59E /* IconDecomposer */ = {
+		494495852E8A08D10061A59E /* Stratify */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 494495912E8A08D30061A59E /* Build configuration list for PBXNativeTarget "IconDecomposer" */;
+			buildConfigurationList = 494495912E8A08D30061A59E /* Build configuration list for PBXNativeTarget "Stratify" */;
 			buildPhases = (
 				494495822E8A08D10061A59E /* Sources */,
 				494495832E8A08D10061A59E /* Frameworks */,
@@ -96,13 +98,14 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				494495882E8A08D10061A59E /* IconDecomposer */,
+				494495882E8A08D10061A59E /* Stratify */,
 			);
-			name = IconDecomposer;
+			name = Stratify;
 			packageProductDependencies = (
+				49AB384D2EAEE31C00B40BB2 /* ImageColorSegmentation */,
 			);
 			productName = IconDecomposer;
-			productReference = 494495862E8A08D10061A59E /* IconDecomposer.app */;
+			productReference = 494495862E8A08D10061A59E /* Stratify.app */;
 			productType = "com.apple.product-type.application";
 		};
 		494495972E8A08F80061A59E /* SLIC_ProofOfConcept */ = {
@@ -171,7 +174,7 @@
 					};
 				};
 			};
-			buildConfigurationList = 494495812E8A08D10061A59E /* Build configuration list for PBXProject "IconDecomposer" */;
+			buildConfigurationList = 494495812E8A08D10061A59E /* Build configuration list for PBXProject "Stratify" */;
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
@@ -182,13 +185,14 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */,
+				49AB384C2EAEE31C00B40BB2 /* XCLocalSwiftPackageReference "../ImageColorSegmentation" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 494495872E8A08D10061A59E /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				494495852E8A08D10061A59E /* IconDecomposer */,
+				494495852E8A08D10061A59E /* Stratify */,
 				494495972E8A08F80061A59E /* SLIC_ProofOfConcept */,
 				494EDE432E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans */,
 			);
@@ -371,20 +375,23 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = P8MA38JTXY;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Stratify/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stratify (icons)";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nuclearcyborg.IconDecomposer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nuclearcyborg.stratify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -403,20 +410,23 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 17;
 				DEVELOPMENT_TEAM = P8MA38JTXY;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				ENABLE_USER_SELECTED_FILES = readonly;
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Stratify/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = "Stratify (icons)";
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_NSHumanReadableCopyright = "";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nuclearcyborg.IconDecomposer;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nuclearcyborg.stratify;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -565,7 +575,7 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		494495812E8A08D10061A59E /* Build configuration list for PBXProject "IconDecomposer" */ = {
+		494495812E8A08D10061A59E /* Build configuration list for PBXProject "Stratify" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				4944958F2E8A08D30061A59E /* Debug */,
@@ -574,7 +584,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		494495912E8A08D30061A59E /* Build configuration list for PBXNativeTarget "IconDecomposer" */ = {
+		494495912E8A08D30061A59E /* Build configuration list for PBXNativeTarget "Stratify" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				494495922E8A08D30061A59E /* Debug */,
@@ -603,6 +613,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		49AB384C2EAEE31C00B40BB2 /* XCLocalSwiftPackageReference "../ImageColorSegmentation" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../ImageColorSegmentation;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -619,6 +636,10 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */;
 			productName = SwiftKMeansPlusPlus;
+		};
+		49AB384D2EAEE31C00B40BB2 /* ImageColorSegmentation */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = ImageColorSegmentation;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

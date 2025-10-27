@@ -18,7 +18,7 @@
                BlueprintIdentifier = "494EDE432E8D8D0E00BD48FF"
                BuildableName = "SLIC_POC_MetalKMeans.app"
                BlueprintName = "SLIC_POC_MetalKMeans"
-               ReferencedContainer = "container:IconDecomposer.xcodeproj">
+               ReferencedContainer = "container:Stratify.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -48,7 +48,7 @@
             BlueprintIdentifier = "494EDE432E8D8D0E00BD48FF"
             BuildableName = "SLIC_POC_MetalKMeans.app"
             BlueprintName = "SLIC_POC_MetalKMeans"
-            ReferencedContainer = "container:IconDecomposer.xcodeproj">
+            ReferencedContainer = "container:Stratify.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -65,7 +65,7 @@
             BlueprintIdentifier = "494EDE432E8D8D0E00BD48FF"
             BuildableName = "SLIC_POC_MetalKMeans.app"
             BlueprintName = "SLIC_POC_MetalKMeans"
-            ReferencedContainer = "container:IconDecomposer.xcodeproj">
+            ReferencedContainer = "container:Stratify.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

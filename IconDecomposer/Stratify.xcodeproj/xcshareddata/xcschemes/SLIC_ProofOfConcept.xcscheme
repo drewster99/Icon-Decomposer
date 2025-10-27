@@ -18,7 +18,7 @@
                BlueprintIdentifier = "494495972E8A08F80061A59E"
                BuildableName = "SLIC_ProofOfConcept.app"
                BlueprintName = "SLIC_ProofOfConcept"
-               ReferencedContainer = "container:IconDecomposer.xcodeproj">
+               ReferencedContainer = "container:Stratify.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -47,7 +47,7 @@
             BlueprintIdentifier = "494495972E8A08F80061A59E"
             BuildableName = "SLIC_ProofOfConcept.app"
             BlueprintName = "SLIC_ProofOfConcept"
-            ReferencedContainer = "container:IconDecomposer.xcodeproj">
+            ReferencedContainer = "container:Stratify.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -64,7 +64,7 @@
             BlueprintIdentifier = "494495972E8A08F80061A59E"
             BuildableName = "SLIC_ProofOfConcept.app"
             BlueprintName = "SLIC_ProofOfConcept"
-            ReferencedContainer = "container:IconDecomposer.xcodeproj">
+            ReferencedContainer = "container:Stratify.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__xcode-mcp-server__get_directory_tree",
+      "mcp__xcode-mcp-server__get_xcode_projects",
+      "Read(//Users/andrew/Documents/ncc_source/cursor/Icon-Decomposer/**)",
+      "mcp__xcode-mcp-server__get_project_schemes",
+      "Bash(say:*)",
+      "mcp__xcode-mcp-server__build_project",
+      "mcp__xcode-mcp-server__clean_project"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

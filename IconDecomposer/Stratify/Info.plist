@@ -77,7 +77,7 @@
 			<key>UTTypeDescription</key>
 			<string>Stratify Layer</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.icondecomposer.layer</string>
+			<string>com.nuclearcyborg.Stratify.layer</string>
 		</dict>
 	</array>
 </dict>

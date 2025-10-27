@@ -22,6 +22,8 @@ struct DocumentView: View {
         HSplitView {
             // Left: Original image preview
             VStack {
+                Spacer()
+                    .frame(height: document.sourceImage == nil ? 16 : 0)
                 Text(document.sourceImage == nil ? "Import your PNG or JPG icon file to get started" : "Original Icon")
                     .font(.headline)
                     .padding(.top)
@@ -212,7 +214,7 @@ struct DocumentView: View {
             }
             .frame(minWidth: 500)
         }
-        .frame(minWidth: 900, minHeight: 600)
+        .frame(minWidth: 1200, minHeight: 800)
         .onAppear {
             document.undoManager = undoManager
 

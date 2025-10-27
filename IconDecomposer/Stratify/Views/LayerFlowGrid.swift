@@ -19,7 +19,7 @@ struct LayerFlowGrid: View {
     let onDrop: (Layer, Layer) -> Void
 
     let columns = [
-        GridItem(.adaptive(minimum: 120, maximum: 200), spacing: 12)
+        GridItem(.adaptive(minimum: 120), spacing: 12)
     ]
 
     var body: some View {
@@ -55,7 +55,7 @@ struct LayerGridItem: View {
                 Image(nsImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
-                    .frame(height: 120)
+                    .frame(minHeight: 120, maxHeight: 400)
                     .background(CheckerboardBackground())
                     .cornerRadius(8)
                     .overlay(

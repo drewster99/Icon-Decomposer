@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ProcessingParameters: Codable, Equatable {
+struct ProcessingParameters: Codable, Equatable, Sendable {
     /// Number of initial clusters before auto-merge
     var numberOfClusters: Int = 8
 

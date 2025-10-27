@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct LayerGroup: Identifiable, Codable {
+struct LayerGroup: Identifiable, Codable, Sendable {
     let id: UUID
     var name: String
     var layers: [Layer]
@@ -24,7 +24,7 @@ struct LayerGroup: Identifiable, Codable {
     }
 }
 
-struct GroupEffects: Codable {
+struct GroupEffects: Codable, Sendable {
     /// Apply glass effect to this group
     var hasGlass: Bool = false
 
@@ -41,7 +41,7 @@ struct GroupEffects: Codable {
     var hasSpecular: Bool = true
 }
 
-enum LightingMode: String, Codable {
+enum LightingMode: String, Codable, Sendable {
     case individual
     case combined
 }

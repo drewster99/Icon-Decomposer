@@ -118,6 +118,7 @@ struct DocumentView: View {
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
 
+                            // Layer grid takes all available space above the toolbar
                             LayerFlowGrid(
                                 layers: document.layers,
                                 selectedLayerIDs: selectedLayerIDs,
@@ -128,9 +129,8 @@ struct DocumentView: View {
                                     combineLayers(source: source, target: target)
                                 }
                             )
+                            .layoutPriority(1)
 
-                            Spacer()
-                            
                             // Instruction text
                             Text("Drag layers onto each other to combine them, or use the tools below:")
                                 .font(.callout)
@@ -138,6 +138,7 @@ struct DocumentView: View {
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal)
                                 .padding(.bottom, 8)
+                                .padding(.top, 8)
                             Divider()
 
                             // Layer management buttons

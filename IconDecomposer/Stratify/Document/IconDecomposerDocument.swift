@@ -37,6 +37,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
         if let data = configuration.file.regularFileContents, !data.isEmpty {
             do {
                 let decoder = PropertyListDecoder()
+                // @unchecked Sendable DocumentArchive can be safely decoded off main actor
                 let archive = try decoder.decode(DocumentArchive.self, from: data)
 
                 self.sourceImage = archive.sourceImage
@@ -76,7 +77,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
         return sourceImage == nil
     }
 
-    func fileWrapper(snapshot: DocumentArchive, configuration: WriteConfiguration) throws -> FileWrapper {
+    nonisolated func fileWrapper(snapshot: DocumentArchive, configuration: WriteConfiguration) throws -> FileWrapper {
         let encoder = PropertyListEncoder()
         let data = try encoder.encode(snapshot)
         return FileWrapper(regularFileWithContents: data)
@@ -520,7 +521,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
 // MARK: - Document Archive Structure
 
-struct DocumentArchive: Codable, Sendable {
+struct DocumentArchive: Codable, @unchecked Sendable {
     let sourceImageData: Data
     let parameters: ProcessingParameters
     let layers: [Layer]

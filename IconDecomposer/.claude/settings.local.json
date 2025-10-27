@@ -12,7 +12,11 @@
       "Read(//Users/andrew/cursor/icon-decomposer/**)",
       "mcp__xcode-mcp-server__get_directory_listing",
       "Bash(git log:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "mcp__xcode-mcp-server__run_project_with_user_interaction",
+      "mcp__xcode-mcp-server__take_window_screenshot",
+      "mcp__xcode-mcp-server__run_project_unmonitored",
+      "mcp__xcode-mcp-server__stop_project"
     ],
     "deny": [],
     "ask": []

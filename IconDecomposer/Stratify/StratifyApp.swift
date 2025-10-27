@@ -52,8 +52,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 document.close()
             }
 
-            // Show welcome window
-            self.showWelcomeWindow()
+            // Show welcome window only if it's been more than 60 days since last launch
+            if self.shouldShowWelcomeWindow() {
+                self.showWelcomeWindow()
+            }
+
+            // Update last launch date
+            UserDefaults.standard.set(Date(), forKey: "LastLaunchDate")
 
             // Mark launch as complete to allow normal document opening
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
@@ -100,6 +105,16 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return false
     }
 
+    private func shouldShowWelcomeWindow() -> Bool {
+        guard let lastLaunchDate = UserDefaults.standard.object(forKey: "LastLaunchDate") as? Date else {
+            // First launch, show welcome window
+            return true
+        }
+
+        let daysSinceLastLaunch = Calendar.current.dateComponents([.day], from: lastLaunchDate, to: Date()).day ?? 0
+        return daysSinceLastLaunch > 60
+    }
+
     private func showWelcomeWindow() {
         // Close any existing welcome window
         welcomeWindowController?.close()
@@ -112,11 +127,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Welcome to Stratify"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
-        window.center()
-        window.setFrameAutosaveName("WelcomeWindow")
 
         welcomeWindowController = NSWindowController(window: window)
         welcomeWindowController?.showWindow(nil)
+        window.center()  // Center after showing to ensure proper positioning
         window.makeKeyAndOrderFront(nil)
     }
 }

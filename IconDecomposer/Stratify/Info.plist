@@ -19,6 +19,8 @@
 			<array>
 				<string>com.nuclearcyborg.Stratify.project</string>
 			</array>
+			<key>NSDocumentClass</key>
+			<string>$(PRODUCT_MODULE_NAME).StratifyDocument</string>
 		</dict>
 	</array>
 	<key>CFBundleExecutable</key>
@@ -52,8 +54,8 @@
 		<dict>
 			<key>UTTypeConformsTo</key>
 			<array>
-				<string>com.apple.package</string>
-				<string>public.composite-content</string>
+				<string>public.data</string>
+				<string>public.content</string>
 			</array>
 			<key>UTTypeDescription</key>
 			<string>Stratify Project</string>

@@ -6,6 +6,11 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
+
+extension UTType {
+    static let layer = UTType(exportedAs: "com.icondecomposer.layer")
+}
 
 struct LayerFlowGrid: View {
     let layers: [Layer]
@@ -103,14 +108,14 @@ struct LayerGridItem: View {
             }
             print("✅ Encoded layer data: \(data.count) bytes")
             let provider = NSItemProvider()
-            provider.registerDataRepresentation(forTypeIdentifier: "com.icondecomposer.layer", visibility: .all) { completion in
+            provider.registerDataRepresentation(forTypeIdentifier: UTType.layer.identifier, visibility: .all) { completion in
                 print("📤 Providing data for drag")
                 completion(data, nil)
                 return nil
             }
             return provider
         }
-        .onDrop(of: ["com.icondecomposer.layer"], isTargeted: $isDragTarget) { providers in
+        .onDrop(of: [UTType.layer], isTargeted: $isDragTarget) { providers in
             print("🟢 Drop received on layer: \(layer.name)")
             print("   Providers count: \(providers.count)")
 
@@ -120,7 +125,7 @@ struct LayerGridItem: View {
                 return false
             }
 
-            _ = provider.loadDataRepresentation(forTypeIdentifier: "com.icondecomposer.layer") { data, error in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.layer.identifier) { data, error in
                 if let error = error {
                     print("❌ Error loading data: \(error)")
                     return
@@ -133,20 +138,20 @@ struct LayerGridItem: View {
 
                 print("📥 Received data: \(data.count) bytes")
 
-                guard let droppedLayer = try? JSONDecoder().decode(Layer.self, from: data) else {
-                    print("❌ Failed to decode layer")
-                    return
-                }
-
-                print("✅ Decoded layer: \(droppedLayer.name)")
-
-                guard droppedLayer.id != layer.id else {
-                    print("⚠️ Dropped on self, ignoring")
-                    return
-                }
-
-                print("🎯 Calling onDrop callback")
                 DispatchQueue.main.async {
+                    guard let droppedLayer = try? JSONDecoder().decode(Layer.self, from: data) else {
+                        print("❌ Failed to decode layer")
+                        return
+                    }
+
+                    print("✅ Decoded layer: \(droppedLayer.name)")
+
+                    guard droppedLayer.id != layer.id else {
+                        print("⚠️ Dropped on self, ignoring")
+                        return
+                    }
+
+                    print("🎯 Calling onDrop callback")
                     onDrop(droppedLayer)
                 }
             }

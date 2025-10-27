@@ -9,7 +9,7 @@ import Foundation
 import AppKit
 import simd
 
-struct Layer: Identifiable, Codable {
+struct Layer: Identifiable, Codable, Sendable {
     let id: UUID
     var name: String
     var pixelCount: Int
@@ -20,7 +20,7 @@ struct Layer: Identifiable, Codable {
     private var imageData: Data
 
     /// Computed property for the actual image
-    var image: NSImage? {
+    nonisolated var image: NSImage? {
         get {
             return NSImage(data: imageData)
         }

@@ -69,6 +69,16 @@
 				</array>
 			</dict>
 		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Stratify Layer</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.icondecomposer.layer</string>
+		</dict>
 	</array>
 </dict>
 </plist>

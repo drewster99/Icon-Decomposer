@@ -340,85 +340,102 @@ class IconDecomposerDocument: ReferenceFileDocument, ObservableObject {
             imageHeight: height
         )
 
-        // Step 3: Cluster using spatial+color features (50/50 weighting)
+        // Step 3: Cluster using spatial+color features with fallback strategy
         let kmeansProcessor = try KMeansProcessor(
             device: device,
             library: library,
             commandQueue: commandQueue
         )
 
-        let clusteringResult = try kmeansProcessor.clusterWithSpatial(
-            superpixelColors: superpixelColors,
-            superpixelPositions: superpixelPositions,
-            numberOfClusters: 2,
-            colorWeight: 0.2,      // 20% color
-            spatialWeight: 0.8,    // 80% spatial - emphasize position for splitting
-            maxIterations: 300,
-            convergenceDistance: 0.01
-        )
+        // Try different spatial weights in order: 0.8, 0.5, 0.3
+        let spatialWeights: [Float] = [0.8, 0.5, 0.3]
+        var splitLayers: [Layer]?
+        var lastAttemptCount = 0
 
-        // Step 4: Map cluster assignments to pixels
-        let labelsPointer = slicResult.labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: width * height)
-        let labelMap = Array(UnsafeBufferPointer(start: labelsPointer, count: width * height))
+        for spatialWeight in spatialWeights {
+            let colorWeight = 1.0 - spatialWeight
 
-        let pixelClusters = LayerExtractor.mapClustersToPixels(
-            clusterAssignments: clusteringResult.clusterAssignments,
-            superpixelData: superpixelData,
-            labelMap: labelMap
-        )
+            let clusteringResult = try kmeansProcessor.clusterWithSpatial(
+                superpixelColors: superpixelColors,
+                superpixelPositions: superpixelPositions,
+                numberOfClusters: 2,
+                colorWeight: colorWeight,
+                spatialWeight: spatialWeight,
+                maxIterations: 300,
+                convergenceDistance: 0.01
+            )
 
-        // Step 5: Extract layers
-        guard let originalImageBuffer = device.makeBuffer(
-            bytes: imageData,
-            length: width * height * 4,
-            options: .storageModeShared
-        ) else {
-            throw ProcessingError.processingFailed("Failed to create image buffer")
-        }
+            // Step 4: Map cluster assignments to pixels
+            let labelsPointer = slicResult.labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: width * height)
+            let labelMap = Array(UnsafeBufferPointer(start: labelsPointer, count: width * height))
 
-        let layerExtractor = try LayerExtractor(
-            device: device,
-            library: library,
-            commandQueue: commandQueue
-        )
+            let pixelClusters = LayerExtractor.mapClustersToPixels(
+                clusterAssignments: clusteringResult.clusterAssignments,
+                superpixelData: superpixelData,
+                labelMap: labelMap
+            )
 
-        let layerBuffers = try layerExtractor.extractLayersGPU(
-            originalImageBuffer: originalImageBuffer,
-            pixelClusters: pixelClusters,
-            numberOfClusters: 2,
-            width: width,
-            height: height
-        )
-
-        // Step 6: Create Layer objects on main actor
-        let splitLayers = await MainActor.run { () -> [Layer] in
-            var layers: [Layer] = []
-
-            for (i, layerBuffer) in layerBuffers.enumerated() {
-                guard let layerImage = ProcessingCoordinator.createLayerImage(from: layerBuffer, width: width, height: height) else {
-                    continue
-                }
-
-                let (pixelCount, avgColor) = ProcessingCoordinator.analyzeLayer(layerBuffer, width: width, height: height)
-
-                // Skip empty layers
-                guard pixelCount > 0 else { continue }
-
-                layers.append(Layer(
-                    name: "\(layer.name) - Part \(i + 1)",
-                    image: layerImage,
-                    pixelCount: pixelCount,
-                    averageColor: avgColor,
-                    isSelected: false
-                ))
+            // Step 5: Extract layers
+            guard let originalImageBuffer = device.makeBuffer(
+                bytes: imageData,
+                length: width * height * 4,
+                options: .storageModeShared
+            ) else {
+                throw ProcessingError.processingFailed("Failed to create image buffer")
             }
 
-            return layers
+            let layerExtractor = try LayerExtractor(
+                device: device,
+                library: library,
+                commandQueue: commandQueue
+            )
+
+            let layerBuffers = try layerExtractor.extractLayersGPU(
+                originalImageBuffer: originalImageBuffer,
+                pixelClusters: pixelClusters,
+                numberOfClusters: 2,
+                width: width,
+                height: height
+            )
+
+            // Step 6: Create Layer objects on main actor
+            let attemptLayers = await MainActor.run { () -> [Layer] in
+                var layers: [Layer] = []
+
+                for (i, layerBuffer) in layerBuffers.enumerated() {
+                    guard let layerImage = ProcessingCoordinator.createLayerImage(from: layerBuffer, width: width, height: height) else {
+                        continue
+                    }
+
+                    let (pixelCount, avgColor) = ProcessingCoordinator.analyzeLayer(layerBuffer, width: width, height: height)
+
+                    // Skip empty layers
+                    guard pixelCount > 0 else { continue }
+
+                    layers.append(Layer(
+                        name: "\(layer.name) - Part \(i + 1)",
+                        image: layerImage,
+                        pixelCount: pixelCount,
+                        averageColor: avgColor,
+                        isSelected: false
+                    ))
+                }
+
+                return layers
+            }
+
+            lastAttemptCount = attemptLayers.count
+
+            // If we got exactly 2 layers, success!
+            if attemptLayers.count == 2 {
+                splitLayers = attemptLayers
+                break
+            }
         }
 
-        // Verify we got exactly 2 non-empty layers
-        guard splitLayers.count == 2 else {
-            throw ProcessingError.processingFailed("Split produced \(splitLayers.count) layers instead of 2. The layer may not be splittable using current parameters.")
+        // Verify we got exactly 2 non-empty layers after all attempts
+        guard let splitLayers = splitLayers else {
+            throw ProcessingError.processingFailed("Split produced \(lastAttemptCount) layers instead of 2 after trying multiple strategies. The layer may not be splittable.")
         }
 
         await MainActor.run {
@@ -487,13 +504,13 @@ class IconDecomposerDocument: ReferenceFileDocument, ObservableObject {
 
 // MARK: - Document Archive Structure
 
-struct DocumentArchive: Codable {
+struct DocumentArchive: Codable, Sendable {
     let sourceImageData: Data
     let parameters: ProcessingParameters
     let layers: [Layer]
     let layerGroups: [LayerGroup]
 
-    var sourceImage: NSImage? {
+    nonisolated var sourceImage: NSImage? {
         return NSImage(data: sourceImageData)
     }
 

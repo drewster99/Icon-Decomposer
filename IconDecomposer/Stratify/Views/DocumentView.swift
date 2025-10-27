@@ -59,22 +59,7 @@ struct DocumentView: View {
                     }
                 }
 
-                if isProcessing {
-                    ProgressView("Processing...")
-                        .padding()
-                }
-
                 Spacer()
-
-                // Action buttons
-                if document.sourceImage != nil {
-                    HStack {
-                        Button("Import New Icon") {
-                            importIcon()
-                        }
-                    }
-                    .padding()
-                }
             }
             .frame(minWidth: 256, maxWidth: 512)
 
@@ -84,62 +69,93 @@ struct DocumentView: View {
                     .font(.headline)
                     .padding()
 
-                if document.layers.isEmpty {
-                    ContentUnavailableView {
-                        Label("No Layers Yet", systemImage: "square.stack.3d.down.forward")
-                    } description: {
-                        Text("Import an icon to decompose it into layers")
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else {
-                    // Instruction text
-                    Text("Drag layers onto each other to combine them")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                        .padding(.bottom, 8)
+                ZStack {
+                    if document.layers.isEmpty {
+                        ContentUnavailableView {
+                            Label("No Layers Yet", systemImage: "square.stack.3d.down.forward")
+                        } description: {
+                            Text("Import an icon to decompose it into layers")
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        VStack(alignment: .leading, spacing: 0) {
+                            // Instruction text
+                            Text("Drag layers onto each other to combine them")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+                                .padding(.bottom, 8)
 
-                    ScrollView {
-                        LayerFlowGrid(
-                            layers: document.layers,
-                            selectedLayerIDs: selectedLayerIDs,
-                            onToggle: { id in
-                                toggleLayerSelection(id)
-                            },
-                            onDrop: { source, target in
-                                combineLayers(source: source, target: target)
+                            ScrollView {
+                                LayerFlowGrid(
+                                    layers: document.layers,
+                                    selectedLayerIDs: selectedLayerIDs,
+                                    onToggle: { id in
+                                        toggleLayerSelection(id)
+                                    },
+                                    onDrop: { source, target in
+                                        combineLayers(source: source, target: target)
+                                    }
+                                )
+                                .padding()
                             }
-                        )
-                        .padding()
+
+                            Divider()
+
+                            // Layer management buttons
+                            HStack {
+                                Button("Auto-Merge Layers") {
+                                    Task {
+                                        await autoMergeLayers()
+                                    }
+                                }
+
+                                Button("Combine Selected") {
+                                    combineSelectedLayers()
+                                }
+                                .disabled(selectedLayerIDs.count < 2)
+
+                                Button("Split Layer") {
+                                    splitSelectedLayer()
+                                }
+                                .disabled(selectedLayerIDs.count != 1)
+
+                                Spacer()
+
+                                Button("Export...") {
+                                    exportIconBundle()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .disabled(document.layers.isEmpty)
+                            }
+                            .padding()
+                        }
                     }
 
-                    Divider()
+                    // Processing overlay
+                    if isProcessing {
+                        ZStack {
+                            Color.black.opacity(0.3)
+                                .ignoresSafeArea()
 
-                    // Layer management buttons
-                    HStack {
-                        Button("Auto-Merge Layers") {
-                            autoMergeLayers()
+                            VStack(spacing: 20) {
+                                ProgressView()
+                                    .scaleEffect(2.0)
+                                    .progressViewStyle(.circular)
+
+                                Text("Processing...")
+                                    .font(.title2)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.white)
+                            }
+                            .padding(40)
+                            .background(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.95))
+                            )
+                            .shadow(radius: 20)
                         }
-
-                        Button("Combine Selected") {
-                            combineSelectedLayers()
-                        }
-                        .disabled(selectedLayerIDs.count < 2)
-
-                        Button("Split Layer") {
-                            splitSelectedLayer()
-                        }
-                        .disabled(selectedLayerIDs.count != 1)
-
-                        Spacer()
-
-                        Button("Export...") {
-                            exportIconBundle()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .disabled(document.layers.isEmpty)
                     }
-                    .padding()
                 }
             }
             .frame(minWidth: 500)
@@ -147,6 +163,13 @@ struct DocumentView: View {
         .frame(minWidth: 900, minHeight: 600)
         .onAppear {
             document.undoManager = undoManager
+
+            // Check for pending image from welcome screen
+            if let pendingImage = WelcomeWindow.pendingImage {
+                WelcomeWindow.pendingImage = nil  // Clear it
+                document.setSourceImage(pendingImage, actionName: "Import Icon")
+                analyzeIcon()
+            }
         }
         .alert("Split Layer Error", isPresented: $showingError) {
             Button("OK", role: .cancel) { }
@@ -226,79 +249,99 @@ struct DocumentView: View {
         window.makeKeyAndOrderFront(nil)
     }
 
-    private func autoMergeLayers() {
-        guard let sourceImage = document.sourceImage else { return }
-
+    @MainActor
+    private func autoMergeLayers() async {
         isProcessing = true
 
-        Task {
-            do {
-                // Re-run processing with auto-merge enabled
-                let mergeParams = document.parameters
-                // Use the auto-merge pipeline
-                let labScale = LABScale(
-                    l: mergeParams.lightnessWeight,
-                    a: 1.0,
-                    b: mergeParams.greenAxisScale
-                )
+        // Yield to allow UI update
+        await Task.yield()
 
-                let pipeline = try ImagePipeline()
-                    .convertColorSpace(to: .lab, scale: labScale)
-                    .segment(
-                        superpixels: mergeParams.numberOfSegments,
-                        compactness: mergeParams.compactness
+        // Merge existing layers based on color similarity
+        let threshold = document.parameters.autoMergeThreshold
+        var layersToMerge = document.layers
+
+        guard !layersToMerge.isEmpty else {
+            isProcessing = false
+            return
+        }
+
+        // Calculate LAB color distance between all pairs of layers
+        func labDistance(_ color1: SIMD3<Float>, _ color2: SIMD3<Float>) -> Float {
+            let diff = color1 - color2
+            return sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z)
+        }
+
+        // Keep merging until no more similar layers found
+        var didMerge = true
+        while didMerge {
+            didMerge = false
+
+            // Find the most similar pair of layers
+            var minDistance = Float.infinity
+            var mergeIndices: (Int, Int)?
+
+            for i in 0..<layersToMerge.count {
+                for j in (i+1)..<layersToMerge.count {
+                    let distance = labDistance(
+                        layersToMerge[i].averageColor,
+                        layersToMerge[j].averageColor
                     )
-                    .cluster(into: mergeParams.numberOfClusters)
-                    .autoMerge(threshold: mergeParams.autoMergeThreshold)
-                    .extractLayers()
-
-                let result = try await pipeline.execute(input: sourceImage)
-
-                // Extract layers (reuse logic from ProcessingCoordinator)
-                guard let clusterCount: Int = result.metadata(for: "clusterCount") else {
-                    throw ProcessingError.processingFailed("No cluster count in result")
-                }
-
-                let width = Int(sourceImage.size.width)
-                let height = Int(sourceImage.size.height)
-
-                var layers: [Layer] = []
-
-                for i in 0..<clusterCount {
-                    guard let layerBuffer = result.buffer(named: "layer_\(i)"),
-                          let layerImage = ProcessingCoordinator.createLayerImage(from: layerBuffer, width: width, height: height) else {
-                        continue
+                    if distance < minDistance {
+                        minDistance = distance
+                        mergeIndices = (i, j)
                     }
-
-                    let (pixelCount, avgColor) = ProcessingCoordinator.analyzeLayer(layerBuffer, width: width, height: height)
-
-                    layers.append(Layer(
-                        name: "Layer \(i + 1)",
-                        image: layerImage,
-                        pixelCount: pixelCount,
-                        averageColor: avgColor,
-                        isSelected: true
-                    ))
-                }
-
-                layers.sort { $0.pixelCount > $1.pixelCount }
-                for (index, layer) in layers.enumerated() {
-                    var updatedLayer = layer
-                    updatedLayer.name = "Layer \(index + 1)"
-                    layers[index] = updatedLayer
-                }
-
-                await MainActor.run {
-                    document.updateLayers(layers, actionName: "Auto-Merge Layers")
-                    isProcessing = false
-                }
-            } catch {
-                await MainActor.run {
-                    print("Auto-merge error: \(error)")
-                    isProcessing = false
                 }
             }
+
+            // If we found a pair within threshold, merge them
+            if let (i, j) = mergeIndices, minDistance < threshold {
+                let layer1 = layersToMerge[i]
+                let layer2 = layersToMerge[j]
+
+                // Combine the images
+                guard let image1 = layer1.image,
+                      let image2 = layer2.image else { continue }
+
+                let size = image1.size
+                let combinedImage = NSImage(size: size)
+
+                combinedImage.lockFocus()
+                image1.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
+                image2.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
+                combinedImage.unlockFocus()
+
+                // Create merged layer (keep first layer's name, combine pixel counts)
+                let mergedLayer = Layer(
+                    name: layer1.name,
+                    image: combinedImage,
+                    pixelCount: layer1.pixelCount + layer2.pixelCount,
+                    averageColor: layer1.averageColor,  // Use larger layer's color
+                    isSelected: false
+                )
+
+                // Remove both layers and add merged layer
+                layersToMerge.remove(at: j)  // Remove higher index first
+                layersToMerge.remove(at: i)
+                layersToMerge.append(mergedLayer)
+
+                didMerge = true
+
+                // Yield to allow UI updates
+                await Task.yield()
+            }
         }
+
+        // Sort by pixel count and renumber
+        layersToMerge.sort { $0.pixelCount > $1.pixelCount }
+        for (index, layer) in layersToMerge.enumerated() {
+            var updatedLayer = layer
+            updatedLayer.name = "Layer \(index + 1)"
+            layersToMerge[index] = updatedLayer
+        }
+
+        // Update document
+        document.updateLayers(layersToMerge, actionName: "Auto-Merge Layers")
+        isProcessing = false
     }
 
     private func combineLayers(source: Layer, target: Layer) {

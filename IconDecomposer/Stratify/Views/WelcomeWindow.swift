@@ -6,87 +6,228 @@
 //
 
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct WelcomeWindow: View {
-    var body: some View {
-        HStack(spacing: 0) {
-            // Left side - branding
-            VStack {
-                Image(systemName: "square.stack.3d.down.forward.fill")
-                    .font(.system(size: 80))
-                    .foregroundStyle(.blue.gradient)
-                    .padding(.bottom, 20)
+    @State private var isTargeted = false
+    @State private var recentDocuments: [URL] = []
 
-                Text("Icon Decomposer")
+    var body: some View {
+        HSplitView {
+            // Left: New Project
+            VStack(spacing: 20) {
+                Text("New Project")
                     .font(.title)
                     .fontWeight(.semibold)
-
-                Text("Break down app icons into editable layers")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 20)
-            }
-            .frame(width: 300)
-            .padding(40)
-            .background(Color(nsColor: .controlBackgroundColor))
-
-            // Right side - actions
-            VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 12) {
-                    WelcomeActionButton(
-                        icon: "plus.square.fill",
-                        title: "New Project",
-                        description: "Import an icon and decompose it into layers"
-                    ) {
-                        createNewDocument()
-                    }
-
-                    WelcomeActionButton(
-                        icon: "doc.fill",
-                        title: "Open Project",
-                        description: "Continue working on a saved project"
-                    ) {
-                        openDocument()
-                    }
-                }
-
-                Divider()
-
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Recent Projects")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-
-                    // TODO: Show recent documents
-                    Text("No recent projects")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.leading, 32)
-                }
+                    .padding(.top, 40)
 
                 Spacer()
 
-                HStack {
-                    Spacer()
-                    Toggle("Show this window on startup", isOn: .constant(true))
+                // Drop zone
+                VStack(spacing: 20) {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 80))
+                        .foregroundStyle(isTargeted ? .blue : .secondary)
+
+                    Text("Drop an Icon Here")
+                        .font(.title2)
+                        .fontWeight(.medium)
+
+                    Text("or")
+                        .foregroundColor(.secondary)
+
+                    Button("Choose Icon File") {
+                        chooseFile()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+
+                    Text("Supports PNG, JPEG, HEIC, TIFF, and more\n1024×1024 recommended")
                         .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
+                .frame(maxWidth: 500)
+                .padding(60)
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(
+                            isTargeted ? Color.blue : Color.secondary.opacity(0.3),
+                            style: StrokeStyle(lineWidth: 2, dash: [10, 5])
+                        )
+                        .background(
+                            RoundedRectangle(cornerRadius: 16)
+                                .fill(isTargeted ? Color.blue.opacity(0.05) : Color.clear)
+                        )
+                )
+                .onDrop(of: [.image, .fileURL], isTargeted: $isTargeted, perform: handleDrop(providers:))
+
+                Spacer()
             }
-            .padding(30)
-            .frame(width: 400)
+            .frame(minWidth: 400)
+            .padding()
+
+            // Right: Open Existing & Recents
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Open Existing")
+                    .font(.title)
+                    .fontWeight(.semibold)
+                    .padding(.top, 40)
+
+                Button(action: openExistingDocument) {
+                    HStack {
+                        Image(systemName: "folder")
+                        Text("Open Project...")
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                Divider()
+                    .padding(.vertical, 10)
+
+                Text("Recent Projects")
+                    .font(.headline)
+
+                if recentDocuments.isEmpty {
+                    VStack(spacing: 12) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.system(size: 40))
+                            .foregroundColor(.secondary)
+                        Text("No recent projects")
+                            .foregroundColor(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 8) {
+                            ForEach(recentDocuments, id: \.self) { url in
+                                Button(action: {
+                                    openDocument(at: url)
+                                }, label: {
+                                    HStack {
+                                        Image(systemName: "doc.on.doc")
+                                            .foregroundColor(.blue)
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(url.deletingPathExtension().lastPathComponent)
+                                                .font(.body)
+                                                .foregroundColor(.primary)
+                                            Text(url.path)
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        Spacer()
+                                    }
+                                    .padding(8)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 6)
+                                            .fill(Color(nsColor: .controlBackgroundColor))
+                                    )
+                                })
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
+                Spacer()
+            }
+            .frame(minWidth: 300)
+            .padding()
         }
-        .frame(width: 1190, height: 675)
+        .frame(minWidth: 800, minHeight: 500)
+        .onAppear(perform: loadRecentDocuments)
     }
 
-    private func createNewDocument() {
+    private func chooseFile() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .bmp, .gif]
+        panel.allowsMultipleSelection = false
+        panel.message = "Select an icon image"
+        panel.prompt = "Import"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            if let image = NSImage(contentsOf: url) {
+                createDocumentWithImage(image)
+            }
+        }
+    }
+
+    private func handleDrop(providers: [NSItemProvider]) -> Bool {
+        // Try to load image from dropped item
+        for provider in providers {
+            if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.image.identifier, options: nil) { item, error in
+                    if let data = item as? Data, let image = NSImage(data: data) {
+                        DispatchQueue.main.async {
+                            self.createDocumentWithImage(image)
+                        }
+                    } else if let url = item as? URL, let image = NSImage(contentsOf: url) {
+                        DispatchQueue.main.async {
+                            self.createDocumentWithImage(image)
+                        }
+                    }
+                }
+                return true
+            }
+
+            if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+                provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                    if let data = item as? Data,
+                       let url = URL(dataRepresentation: data, relativeTo: nil),
+                       let image = NSImage(contentsOf: url) {
+                        DispatchQueue.main.async {
+                            self.createDocumentWithImage(image)
+                        }
+                    }
+                }
+                return true
+            }
+        }
+
+        return false
+    }
+
+    private func createDocumentWithImage(_ image: NSImage) {
+        closeWelcomeWindow()
+
+        // Store the image temporarily
+        WelcomeWindow.pendingImage = image
+
+        // Create a new document - it will pick up the pending image
         NSDocumentController.shared.newDocument(nil)
+    }
+
+    // Temporary storage for image dropped on welcome screen
+    static var pendingImage: NSImage?
+
+    private func openExistingDocument() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.iconDecomposerProject]
+        panel.allowsMultipleSelection = false
+        panel.message = "Select a Stratify project to open"
+        panel.prompt = "Open"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            openDocument(at: url)
+        }
+    }
+
+    private func openDocument(at url: URL) {
+        NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { document, alreadyOpen, error in
+            if let error = error {
+                print("Error opening document: \(error)")
+            }
+        }
         closeWelcomeWindow()
     }
 
-    private func openDocument() {
-        NSDocumentController.shared.openDocument(nil)
-        closeWelcomeWindow()
+    private func loadRecentDocuments() {
+        let documentController = NSDocumentController.shared
+        recentDocuments = documentController.recentDocumentURLs.filter { url in
+            url.pathExtension == "stratify"
+        }
     }
 
     private func closeWelcomeWindow() {
@@ -94,43 +235,6 @@ struct WelcomeWindow: View {
         if let window = NSApplication.shared.windows.first(where: { $0.title == "Welcome to Icon Decomposer" }) {
             window.close()
         }
-    }
-}
-
-struct WelcomeActionButton: View {
-    let icon: String
-    let title: String
-    let description: String
-    let action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 16) {
-                Image(systemName: icon)
-                    .font(.system(size: 32))
-                    .foregroundStyle(.blue)
-                    .frame(width: 40)
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-
-                    Text(description)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-
-                Spacer()
-
-                Image(systemName: "chevron.right")
-                    .foregroundColor(.secondary)
-            }
-            .padding(12)
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(8)
-        }
-        .buttonStyle(.plain)
     }
 }
 

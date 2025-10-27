@@ -17,6 +17,7 @@ struct DocumentView: View {
     @State private var selectedLayerIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var showingError = false
+    @State private var imageWindows: [NSWindow] = []
 
     var body: some View {
         HSplitView {
@@ -37,15 +38,22 @@ struct DocumentView: View {
                             Spacer()
                             HStack {
                                 Spacer()
-                                Image(nsImage: sourceImage)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(width: size, height: size)
-                                    .background(CheckerboardBackground())
-                                    .border(Color.secondary.opacity(0.3))
-                                    .onTapGesture(count: 2) {
-                                        openIconInWindow(sourceImage)
-                                    }
+                                VStack(spacing: 8) {
+                                    Image(nsImage: sourceImage)
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: size, height: size)
+                                        .background(CheckerboardBackground())
+                                        .border(Color.secondary.opacity(0.3))
+                                        .onTapGesture(count: 2) {
+                                            openIconInWindow(sourceImage)
+                                        }
+                                        .help("Double-click to view at full size")
+
+                                    Text("Double-click to enlarge")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                }
                                 Spacer()
                             }
                             Spacer()
@@ -99,7 +107,8 @@ struct DocumentView: View {
 
                 Spacer()
             }
-            .frame(minWidth: 256, idealWidth: document.sourceImage == nil ? 512 : 256, maxWidth: 512)
+            .frame(minWidth: 256, maxWidth: document.sourceImage == nil ? 512 : 256)
+            .animation(.easeInOut(duration: 0.3), value: document.sourceImage != nil)
 
             // Right: Layers
             VStack(alignment: .leading, spacing: 0) {
@@ -299,6 +308,21 @@ struct DocumentView: View {
         )
         window.center()
         window.makeKeyAndOrderFront(nil)
+
+        // Retain the window and set up cleanup on close
+        imageWindows.append(window)
+
+        // Remove window from array when it closes
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: window,
+            queue: .main,
+            using: { [weak window] _ in
+                if let window = window {
+                    self.imageWindows.removeAll { $0 == window }
+                }
+            }
+        )
     }
 
     @MainActor

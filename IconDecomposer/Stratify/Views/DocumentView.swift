@@ -99,7 +99,7 @@ struct DocumentView: View {
 
                 Spacer()
             }
-            .frame(minWidth: 256, maxWidth: 512)
+            .frame(minWidth: 256, idealWidth: document.sourceImage == nil ? 512 : 256, maxWidth: 512)
 
             // Right: Layers
             VStack(alignment: .leading, spacing: 0) {
@@ -212,7 +212,7 @@ struct DocumentView: View {
             }
             .frame(minWidth: 500)
         }
-        .frame(minWidth: 1200, minHeight: 800)
+        .frame(minWidth: 800, minHeight: 600)
         .onAppear {
             document.undoManager = undoManager
 

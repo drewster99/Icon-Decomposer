@@ -254,8 +254,8 @@ public class PipelineExecution {
 
 extension ImagePipeline {
     /// Convert color space
-    public func convertColorSpace(to colorSpace: ColorSpace, scale: LABScale = .default) throws -> Self {
-        let operation = ColorConversionOperation(colorSpace: colorSpace, scale: scale)
+    public func convertColorSpace(to colorSpace: ColorSpace, adjustments: LABColorAdjustments = .default) throws -> Self {
+        let operation = ColorConversionOperation(colorSpace: colorSpace, adjustments: adjustments)
         return try addOperation(operation)
     }
 
@@ -278,8 +278,8 @@ extension ImagePipeline {
     }
 
     /// Merge similar clusters
-    public func autoMerge(threshold: Float) throws -> Self {
-        let operation = MergeOperation(threshold: threshold)
+    public func autoMerge(threshold: Float, strategy: MergeStrategy = .simple) throws -> Self {
+        let operation = MergeOperation(threshold: threshold, strategy: strategy)
         return try addOperation(operation)
     }
 }
@@ -291,17 +291,27 @@ public enum ColorSpace {
     case rgb
 }
 
-public struct LABScale {
-    public let l: Float
-    public let a: Float
-    public let b: Float
+public struct LABColorAdjustments {
+    public let lightnessScale: Float
+    public let greenAxisScale: Float
 
-    public static let `default` = LABScale(l: 1.0, a: 1.0, b: 1.0)
-    public static let emphasizeGreens = LABScale(l: 1.0, a: 1.0, b: 2.0)
+    /// Default adjustments optimized for icon decomposition
+    public static let `default` = LABColorAdjustments(
+        lightnessScale: 0.35,
+        greenAxisScale: 2.0
+    )
 
-    public init(l: Float, a: Float, b: Float) {
-        self.l = l
-        self.a = a
-        self.b = b
+    public init(lightnessScale: Float, greenAxisScale: Float) {
+        self.lightnessScale = lightnessScale
+        self.greenAxisScale = greenAxisScale
     }
+}
+
+public enum MergeStrategy {
+    /// Simple merge: merges all cluster pairs below threshold in one pass
+    case simple
+
+    /// Iterative weighted merge: uses weighted distances to find pairs, checks unweighted threshold to stop
+    /// - Parameter adjustments: Optional color adjustments. If nil, uses pipeline default.
+    case iterativeWeighted(adjustments: LABColorAdjustments? = nil)
 }

@@ -50,6 +50,42 @@ struct DocumentView: View {
                         }
                     }
                     .frame(minWidth: 256, maxWidth: 512)
+
+                    // Parameters section
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Processing parameters")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+
+                        VStack(alignment: .leading, spacing: 8) {
+                            HStack {
+                                Text("Initial layers:")
+                                    .font(.caption)
+                                    .frame(width: 100, alignment: .leading)
+
+                                Slider(value: Binding(
+                                    get: { Double(document.parameters.numberOfClusters) },
+                                    set: { document.parameters.numberOfClusters = Int($0) }
+                                ), in: 5...20, step: 1)
+                                .frame(maxWidth: 150)
+
+                                Text("\(document.parameters.numberOfClusters)")
+                                    .font(.caption)
+                                    .frame(width: 25, alignment: .trailing)
+                            }
+
+                            Button("Re-analyze") {
+                                analyzeIcon()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(isProcessing)
+                        }
+                    }
+                    .padding()
+                    .background(Color(nsColor: .controlBackgroundColor))
+                    .cornerRadius(8)
+                    .padding(.horizontal)
                 } else {
                     // Import screen
                     ImportIconView { selectedImage in
@@ -79,12 +115,6 @@ struct DocumentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
-                            // Instruction text
-                            Text("Drag layers onto each other to combine them")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal)
-                                .padding(.bottom, 8)
 
                             ScrollView {
                                 LayerFlowGrid(
@@ -100,6 +130,14 @@ struct DocumentView: View {
                                 .padding()
                             }
 
+                            Spacer()
+                            
+                            // Instruction text
+                            Text("Drag layers onto each other to combine them")
+                                .font(.callout)
+                                .foregroundColor(.secondary)
+                                .padding(.horizontal)
+                                .padding(.bottom, 8)
                             Divider()
 
                             // Layer management buttons
@@ -121,6 +159,19 @@ struct DocumentView: View {
                                 .disabled(selectedLayerIDs.count != 1)
 
                                 Spacer()
+
+                                // Undo/Redo buttons
+                                Button(action: { undoManager?.undo() }) {
+                                    Image(systemName: "arrow.uturn.backward")
+                                }
+                                .disabled(!(undoManager?.canUndo ?? false))
+                                .help("Undo")
+
+                                Button(action: { undoManager?.redo() }) {
+                                    Image(systemName: "arrow.uturn.forward")
+                                }
+                                .disabled(!(undoManager?.canRedo ?? false))
+                                .help("Redo")
 
                                 Button("Export...") {
                                     exportIconBundle()
@@ -269,6 +320,23 @@ struct DocumentView: View {
         func labDistance(_ color1: SIMD3<Float>, _ color2: SIMD3<Float>) -> Float {
             let diff = color1 - color2
             return sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z)
+        }
+
+        // Apply weighting to LAB color (lightness reduction + green axis scaling)
+        func applyWeighting(_ color: SIMD3<Float>, lightnessWeight: Float, greenAxisScale: Float) -> SIMD3<Float> {
+            var a = color.y
+            // Apply green axis scaling to negative 'a' values
+            if a < 0 {
+                a *= greenAxisScale
+            }
+            return SIMD3<Float>(color.x * lightnessWeight, a, color.z)
+        }
+
+        // Calculate weighted distance
+        func weightedDistance(_ color1: SIMD3<Float>, _ color2: SIMD3<Float>, lightnessWeight: Float, greenAxisScale: Float) -> Float {
+            let weighted1 = applyWeighting(color1, lightnessWeight: lightnessWeight, greenAxisScale: greenAxisScale)
+            let weighted2 = applyWeighting(color2, lightnessWeight: lightnessWeight, greenAxisScale: greenAxisScale)
+            return labDistance(weighted1, weighted2)
         }
 
         // Keep merging until no more similar layers found

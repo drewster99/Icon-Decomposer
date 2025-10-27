@@ -21,6 +21,7 @@ class IconDecomposerDocument: ReferenceFileDocument, ObservableObject {
     // MARK: - ReferenceFileDocument
 
     static var readableContentTypes: [UTType] { [.iconDecomposerProject] }
+    static var writableContentTypes: [UTType] { [.iconDecomposerProject] }
 
     // MARK: - Undo Support
 
@@ -33,23 +34,33 @@ class IconDecomposerDocument: ReferenceFileDocument, ObservableObject {
         self.layerGroups = []
         self.processingState = .idle
 
-        if let data = configuration.file.regularFileContents {
-            let decoder = PropertyListDecoder()
-            let archive = try decoder.decode(DocumentArchive.self, from: data)
+        if let data = configuration.file.regularFileContents, !data.isEmpty {
+            do {
+                let decoder = PropertyListDecoder()
+                let archive = try decoder.decode(DocumentArchive.self, from: data)
 
-            self.sourceImage = archive.sourceImage
-            self.parameters = archive.parameters
-            self.layers = archive.layers
-            self.layerGroups = archive.layerGroups
-            self.processingState = .completed
+                self.sourceImage = archive.sourceImage
+                self.parameters = archive.parameters
+                self.layers = archive.layers
+                self.layerGroups = archive.layerGroups
+                self.processingState = .completed
+            } catch {
+                // If decoding fails (e.g., from autosave corruption), start with empty document
+                print("Warning: Failed to decode document data: \(error.localizedDescription)")
+                // Keep the default empty values initialized above
+            }
         }
     }
 
     func snapshot(contentType: UTType) throws -> DocumentArchive {
+        // Allow snapshots only when there's content to save
+        // This prevents autosave errors for empty documents
         guard let sourceImage = sourceImage else {
-            throw NSError(domain: "IconDecomposerDocument",
-                         code: 1,
-                         userInfo: [NSLocalizedDescriptionKey: "No source image to save"])
+            throw NSError(
+                domain: "IconDecomposerDocument",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "No source image to save"]
+            )
         }
 
         return DocumentArchive(
@@ -58,6 +69,11 @@ class IconDecomposerDocument: ReferenceFileDocument, ObservableObject {
             layers: layers,
             layerGroups: layerGroups
         )
+    }
+
+    // Override to prevent autosaving empty documents
+    var isInViewingMode: Bool {
+        return sourceImage == nil
     }
 
     func fileWrapper(snapshot: DocumentArchive, configuration: WriteConfiguration) throws -> FileWrapper {

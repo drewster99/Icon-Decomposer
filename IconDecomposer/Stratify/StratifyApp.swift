@@ -8,7 +8,7 @@
 import SwiftUI
 
 @main
-struct IconDecomposerApp: App {
+struct StratifyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
@@ -25,7 +25,7 @@ struct IconDecomposerApp: App {
             }
 
             CommandGroup(replacing: .help) {
-                Button("Icon Decomposer Help") {
+                Button("\(AppInfo.appName) Help") {
                     // TODO: Open help
                 }
             }

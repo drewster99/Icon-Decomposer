@@ -71,6 +71,7 @@ public class KMeansProcessor {
         superpixelColors: [SIMD3<Float>],
         numberOfClusters: Int,
         lightnessWeight: Float,
+        greenAxisScale: Float,
         maxIterations: Int = 300,
         convergenceDistance: Float = 0.01,
         seed: Int? = nil
@@ -97,7 +98,7 @@ public class KMeansProcessor {
         let colorsBuffer = try applyWeighting(
             originalColors: originalColorsBuffer,
             lightnessWeight: lightnessWeight,
-            greenAxisScale: 2.0,
+            greenAxisScale: greenAxisScale,
             numPoints: numPoints
         )
 

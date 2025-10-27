@@ -24,21 +24,20 @@ class ProcessingCoordinator {
         print("  Auto-merge threshold: \(parameters.autoMergeThreshold)")
 
         // Create processing pipeline
-        let labScale = LABScale(
-            l: parameters.lightnessWeight,
-            a: 1.0,
-            b: parameters.greenAxisScale
+        let adjustments = LABColorAdjustments(
+            lightnessScale: parameters.lightnessWeight,
+            greenAxisScale: parameters.greenAxisScale
         )
 
         let pipeline = try ImagePipeline()
-            .convertColorSpace(to: .lab, scale: labScale)
+            .convertColorSpace(to: .lab, adjustments: adjustments)
             .segment(
                 superpixels: parameters.numberOfSegments,
                 compactness: parameters.compactness
             )
-            .cluster(into: parameters.numberOfClusters)
-            // Don't auto-merge - let user manually combine layers
-            // .autoMerge(threshold: parameters.autoMergeThreshold)
+            .cluster(into: parameters.numberOfClusters, seed: parameters.clusteringSeed)
+            // Don't auto-merge - let user manually combine layers via "Auto-Merge Layers" button
+            // .autoMerge(threshold: parameters.autoMergeThreshold, strategy: .iterativeWeighted())
             .extractLayers()
 
         // Execute pipeline

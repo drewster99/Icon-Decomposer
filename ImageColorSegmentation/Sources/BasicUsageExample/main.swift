@@ -62,7 +62,7 @@ func basicPipeline() async throws {
     print("📸 Loaded image: \(Int(image.size.width))x\(Int(image.size.height))")
 
     let pipeline = try ImagePipeline()
-        .convertColorSpace(to: .lab, scale: .emphasizeGreens)
+        .convertColorSpace(to: .lab, adjustments: LABColorAdjustments(lightnessScale: 0.35, greenAxisScale: 2.0))
         .segment(superpixels: 1000, compactness: 25)
         .cluster(into: 5, seed: 42)
         .extractLayers()
@@ -134,7 +134,7 @@ func basicPipeline() async throws {
         • Algorithm: SLIC + K-means++
         • Superpixels: 1000
         • Clusters: \(clusterCount)
-        • LAB scale: emphasizeGreens (b-axis × 2.0)
+        • Color adjustments: lightnessScale=0.35, greenAxisScale=2.0
 
         ✅ Implementation Status:
         The pipeline uses production-ready Metal shaders for all operations:
@@ -350,13 +350,13 @@ func customLABScaling() async throws {
 
     // Emphasize greens (common for nature/foliage)
     let greenPipeline = try ImagePipeline()
-        .convertColorSpace(to: .lab, scale: .emphasizeGreens)  // b-axis scaled 2x
+        .convertColorSpace(to: .lab, adjustments: LABColorAdjustments(lightnessScale: 0.35, greenAxisScale: 2.0))  // green axis scaled 2x
         .segment(superpixels: 1000)
         .cluster(into: 5)
 
     // Custom scaling for specific use case
     let customPipeline = try ImagePipeline()
-        .convertColorSpace(to: .lab, scale: LABScale(l: 1.0, a: 1.5, b: 2.5))
+        .convertColorSpace(to: .lab, adjustments: LABColorAdjustments(lightnessScale: 1.0, greenAxisScale: 2.5))
         .segment(superpixels: 1000)
         .cluster(into: 5)
 
@@ -387,8 +387,8 @@ func multiStageMerging() async throws {
         .convertColorSpace(to: .lab)
         .segment(superpixels: 1000)
         .cluster(into: 20)          // Start with many clusters
-        .autoMerge(threshold: 0.20) // First merge pass
-        .autoMerge(threshold: 0.35) // Second merge pass
+        .autoMerge(threshold: 0.20, strategy: .iterativeWeighted()) // First merge pass
+        .autoMerge(threshold: 0.35, strategy: .iterativeWeighted()) // Second merge pass
         .extractLayers()
 
     let result = try await pipeline.execute(input: image)

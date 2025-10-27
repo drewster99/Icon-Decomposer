@@ -1,6 +1,6 @@
 //
 //  DocumentView.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Main document window view
 //
@@ -10,7 +10,7 @@ import UniformTypeIdentifiers
 import ImageColorSegmentation
 
 struct DocumentView: View {
-    @ObservedObject var document: IconDecomposerDocument
+    @ObservedObject var document: StratifyDocument
     @Environment(\.undoManager) var undoManager
 
     @State private var isProcessing = false
@@ -465,5 +465,5 @@ struct DocumentView: View {
 }
 
 #Preview {
-    DocumentView(document: IconDecomposerDocument())
+    DocumentView(document: StratifyDocument())
 }

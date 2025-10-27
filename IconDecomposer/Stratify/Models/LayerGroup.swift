@@ -1,6 +1,6 @@
 //
 //  LayerGroup.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Represents a group of layers for .icon bundle export
 //

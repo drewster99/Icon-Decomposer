@@ -1,6 +1,6 @@
 //
 //  SharedViews.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Shared UI components
 //

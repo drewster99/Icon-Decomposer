@@ -1,6 +1,6 @@
 //
 //  ContentView.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Created by Andrew Benson on 9/28/25.
 //

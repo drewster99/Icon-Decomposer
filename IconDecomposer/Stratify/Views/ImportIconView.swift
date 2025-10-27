@@ -1,6 +1,6 @@
 //
 //  ImportIconView.swift
-//  IconDecomposer
+//  Stratify
 //
 //  View for importing an icon with drag & drop support
 //

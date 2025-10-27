@@ -1,6 +1,6 @@
 //
 //  Layer.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Represents a single color-separated layer
 //

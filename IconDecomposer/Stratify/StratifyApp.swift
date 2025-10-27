@@ -1,6 +1,6 @@
 //
-//  IconDecomposerApp.swift
-//  IconDecomposer
+//  StratifyApp.swift
+//  Stratify
 //
 //  Created by Andrew Benson on 9/28/25.
 //
@@ -13,7 +13,7 @@ struct StratifyApp: App {
 
     var body: some Scene {
         // Document-based scene
-        DocumentGroup(newDocument: IconDecomposerDocument.init) { file in
+        DocumentGroup(newDocument: StratifyDocument.init) { file in
             DocumentView(document: file.document)
         }
         .commands {

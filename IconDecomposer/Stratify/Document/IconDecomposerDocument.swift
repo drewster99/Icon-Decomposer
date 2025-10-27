@@ -1,6 +1,6 @@
 //
-//  IconDecomposerDocument.swift
-//  IconDecomposer
+//  StratifyDocument.swift
+//  Stratify
 //
 //  Document model for icon decomposition projects
 //
@@ -13,15 +13,15 @@ import Metal
 import ImageColorSegmentation
 
 extension UTType {
-    static let iconDecomposerProject = UTType(exportedAs: "com.nuclearcyborg.Stratify.project")
+    static let stratifyProjectUTType = UTType(exportedAs: "com.nuclearcyborg.Stratify.project")
 }
 
-class IconDecomposerDocument: ReferenceFileDocument, ObservableObject {
+class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
     // MARK: - ReferenceFileDocument
 
-    static var readableContentTypes: [UTType] { [.iconDecomposerProject] }
-    static var writableContentTypes: [UTType] { [.iconDecomposerProject] }
+    static var readableContentTypes: [UTType] { [.stratifyProjectUTType] }
+    static var writableContentTypes: [UTType] { [.stratifyProjectUTType] }
 
     // MARK: - Undo Support
 
@@ -57,7 +57,7 @@ class IconDecomposerDocument: ReferenceFileDocument, ObservableObject {
         // This prevents autosave errors for empty documents
         guard let sourceImage = sourceImage else {
             throw NSError(
-                domain: "IconDecomposerDocument",
+                domain: "StratifyDocument",
                 code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "No source image to save"]
             )

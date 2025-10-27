@@ -1,6 +1,6 @@
 //
 //  ProcessingCoordinator.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Coordinates icon processing using ImageColorSegmentation package
 //

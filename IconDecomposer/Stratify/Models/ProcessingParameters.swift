@@ -1,6 +1,6 @@
 //
 //  ProcessingParameters.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Processing parameters for icon decomposition
 //

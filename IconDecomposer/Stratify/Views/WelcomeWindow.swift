@@ -1,6 +1,6 @@
 //
 //  WelcomeWindow.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Welcome screen shown on app launch
 //
@@ -37,12 +37,12 @@ struct WelcomeWindow: View {
                     }
 
                     Text("Step 1")
-                        .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
+                        .font(.title3)
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
 
                     Text("Import your single file\nPNG or JPG icon")
-                        .font(.custom(AppInfo.fontFamily, size: 15, relativeTo: .body))
+                        .font(.body)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -61,12 +61,12 @@ struct WelcomeWindow: View {
                     }
 
                     Text("Step 2")
-                        .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
+                        .font(.title3)
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
 
                     Text("Stratify automatically splits\ninto layers that you can adjust")
-                        .font(.custom(AppInfo.fontFamily, size: 15, relativeTo: .body))
+                        .font(.body)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -85,12 +85,12 @@ struct WelcomeWindow: View {
                     }
 
                     Text("Step 3")
-                        .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
+                        .font(.title3)
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
 
                     Text("Export the layer stack into\na .icon Icon Composer bundle")
-                        .font(.custom(AppInfo.fontFamily, size: 15, relativeTo: .body))
+                        .font(.body)
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -101,7 +101,7 @@ struct WelcomeWindow: View {
             // Get Started button
             Button(action: getStarted) {
                 Text("Get Started")
-                    .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
+                    .font(.title3)
                     .fontWeight(.medium)
                     .frame(minWidth: 200)
             }

@@ -1,6 +1,6 @@
 //
 //  LayerFlowGrid.swift
-//  IconDecomposer
+//  Stratify
 //
 //  Flow layout for layer thumbnails
 //
@@ -9,7 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 extension UTType {
-    static let layer = UTType(exportedAs: "com.icondecomposer.layer")
+    static let stratifyLayerUTType = UTType(exportedAs: "com.nuclearcyborg.Stratify.layer")
 }
 
 struct LayerFlowGrid: View {
@@ -108,14 +108,14 @@ struct LayerGridItem: View {
             }
             print("✅ Encoded layer data: \(data.count) bytes")
             let provider = NSItemProvider()
-            provider.registerDataRepresentation(forTypeIdentifier: UTType.layer.identifier, visibility: .all) { completion in
+            provider.registerDataRepresentation(forTypeIdentifier: UTType.stratifyLayerUTType.identifier, visibility: .all) { completion in
                 print("📤 Providing data for drag")
                 completion(data, nil)
                 return nil
             }
             return provider
         }
-        .onDrop(of: [UTType.layer], isTargeted: $isDragTarget) { providers in
+        .onDrop(of: [UTType.stratifyLayerUTType], isTargeted: $isDragTarget) { providers in
             print("🟢 Drop received on layer: \(layer.name)")
             print("   Providers count: \(providers.count)")
 
@@ -125,7 +125,7 @@ struct LayerGridItem: View {
                 return false
             }
 
-            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.layer.identifier) { data, error in
+            _ = provider.loadDataRepresentation(forTypeIdentifier: UTType.stratifyLayerUTType.identifier) { data, error in
                 if let error = error {
                     print("❌ Error loading data: \(error)")
                     return

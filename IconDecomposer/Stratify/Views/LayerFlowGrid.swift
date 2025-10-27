@@ -18,17 +18,47 @@ struct LayerFlowGrid: View {
     let onToggle: (UUID) -> Void
     let onDrop: (Layer, Layer) -> Void
 
+    private func calculateOptimalLayout(width: CGFloat, height: CGFloat, layerCount: Int) -> (columnCount: Int, itemSize: CGFloat) {
+        let spacing: CGFloat = 12
+        let padding: CGFloat = 12
+
+        var bestColumnCount = 3
+        var bestItemSize: CGFloat = 0
+
+        for columns in 3...6 {
+            let rows = Int(ceil(Double(layerCount) / Double(columns)))
+
+            // Calculate maximum item size for this layout
+            let totalHorizontalSpacing = spacing * CGFloat(columns - 1) + padding * 2
+            let totalVerticalSpacing = spacing * CGFloat(rows - 1) + padding * 2
+
+            let maxWidth = (width - totalHorizontalSpacing) / CGFloat(columns)
+            let maxHeight = (height - totalVerticalSpacing) / CGFloat(rows)
+
+            // Use the smaller of width/height to maintain square aspect
+            let itemSize = min(maxWidth, maxHeight)
+
+            // Pick layout with largest item size that fits everything
+            if itemSize > bestItemSize {
+                bestItemSize = itemSize
+                bestColumnCount = columns
+            }
+        }
+
+        return (bestColumnCount, bestItemSize)
+    }
+
     var body: some View {
         GeometryReader { geometry in
-            let availableWidth = geometry.size.width
             let spacing: CGFloat = 12
+            let padding: CGFloat = 12
+            let layout = calculateOptimalLayout(
+                width: geometry.size.width,
+                height: geometry.size.height,
+                layerCount: layers.count
+            )
 
-            // Calculate optimal number of columns (3-5 based on width)
-            let columnCount = max(3, min(5, Int(availableWidth / 200)))
-            let totalSpacing = spacing * CGFloat(columnCount - 1)
-            let columnWidth = (availableWidth - totalSpacing) / CGFloat(columnCount)
-
-            let columns = Array(repeating: GridItem(.fixed(columnWidth), spacing: spacing), count: columnCount)
+            let columns = Array(repeating: GridItem(.fixed(layout.itemSize), spacing: spacing), count: layout.columnCount)
 
             ScrollView {
                 LazyVGrid(columns: columns, spacing: spacing) {
@@ -45,7 +75,7 @@ struct LayerFlowGrid: View {
                         )
                     }
                 }
-                .padding(spacing)
+                .padding(padding)
             }
         }
     }

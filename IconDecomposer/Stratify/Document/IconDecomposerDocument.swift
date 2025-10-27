@@ -521,7 +521,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
 // MARK: - Document Archive Structure
 
-struct DocumentArchive: Codable, @unchecked Sendable {
+struct DocumentArchive: @unchecked Sendable {
     let sourceImageData: Data
     let parameters: ProcessingParameters
     let layers: [Layer]
@@ -543,5 +543,31 @@ struct DocumentArchive: Codable, @unchecked Sendable {
         self.parameters = parameters
         self.layers = layers
         self.layerGroups = layerGroups
+    }
+}
+
+// Explicit Codable conformance to avoid main-actor isolation inference
+extension DocumentArchive: Codable {
+    enum CodingKeys: String, CodingKey {
+        case sourceImageData
+        case parameters
+        case layers
+        case layerGroups
+    }
+
+    nonisolated init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        sourceImageData = try container.decode(Data.self, forKey: .sourceImageData)
+        parameters = try container.decode(ProcessingParameters.self, forKey: .parameters)
+        layers = try container.decode([Layer].self, forKey: .layers)
+        layerGroups = try container.decode([LayerGroup].self, forKey: .layerGroups)
+    }
+
+    nonisolated func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(sourceImageData, forKey: .sourceImageData)
+        try container.encode(parameters, forKey: .parameters)
+        try container.encode(layers, forKey: .layers)
+        try container.encode(layerGroups, forKey: .layerGroups)
     }
 }

@@ -22,6 +22,10 @@ struct LayerFlowGrid: View {
         let spacing: CGFloat = 12
         let padding: CGFloat = 12
 
+        // Reserve space for toolbar and text at bottom (~120px)
+        let reservedHeight: CGFloat = 120
+        let availableHeight = max(height - reservedHeight, 200)
+
         var bestColumnCount = 3
         var bestItemSize: CGFloat = 0
 
@@ -33,7 +37,7 @@ struct LayerFlowGrid: View {
             let totalVerticalSpacing = spacing * CGFloat(rows - 1) + padding * 2
 
             let maxWidth = (width - totalHorizontalSpacing) / CGFloat(columns)
-            let maxHeight = (height - totalVerticalSpacing) / CGFloat(rows)
+            let maxHeight = (availableHeight - totalVerticalSpacing) / CGFloat(rows)
 
             // Use the smaller of width/height to maintain square aspect
             let itemSize = min(maxWidth, maxHeight)

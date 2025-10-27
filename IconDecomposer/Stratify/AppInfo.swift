@@ -12,6 +12,9 @@ struct AppInfo {
     /// Official name for the app
     static let appName: String = "Stratify"
 
+    /// Font family used throughout the app
+    static let fontFamily = "Didot"
+
     /// This app's "Apple ID" on the app store
     static let appStoreAppID = "XXXXX" // actual app ID - URLs won't work until app is live
 

@@ -14,10 +14,10 @@ struct WelcomeWindow: View {
             // Header
             VStack(spacing: 12) {
                 Text("Welcome to Stratify")
-                    .font(.system(size: 36, weight: .bold))
+                    .font(.custom(AppInfo.fontFamily, size: 36, relativeTo: .largeTitle))
 
                 Text("Easily convert your single-image icons to Icon Composer layers")
-                    .font(.title3)
+                    .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
                     .foregroundColor(.secondary)
             }
             .padding(.top, 50)
@@ -37,12 +37,12 @@ struct WelcomeWindow: View {
                     }
 
                     Text("Step 1")
-                        .font(.title3)
+                        .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
 
                     Text("Import your single file\nPNG or JPG icon")
-                        .font(.body)
+                        .font(.custom(AppInfo.fontFamily, size: 15, relativeTo: .body))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -61,12 +61,12 @@ struct WelcomeWindow: View {
                     }
 
                     Text("Step 2")
-                        .font(.title3)
+                        .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
 
                     Text("Stratify automatically splits\ninto layers that you can adjust")
-                        .font(.body)
+                        .font(.custom(AppInfo.fontFamily, size: 15, relativeTo: .body))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -85,12 +85,12 @@ struct WelcomeWindow: View {
                     }
 
                     Text("Step 3")
-                        .font(.title3)
+                        .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
                         .fontWeight(.bold)
                         .foregroundColor(.primary)
 
                     Text("Export the layer stack into\na .icon Icon Composer bundle")
-                        .font(.body)
+                        .font(.custom(AppInfo.fontFamily, size: 15, relativeTo: .body))
                         .multilineTextAlignment(.center)
                         .fixedSize(horizontal: false, vertical: true)
                 }
@@ -101,7 +101,7 @@ struct WelcomeWindow: View {
             // Get Started button
             Button(action: getStarted) {
                 Text("Get Started")
-                    .font(.title3)
+                    .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
                     .fontWeight(.medium)
                     .frame(minWidth: 200)
             }

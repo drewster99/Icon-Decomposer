@@ -22,7 +22,7 @@ struct DocumentView: View {
         HSplitView {
             // Left: Original image preview
             VStack {
-                Text("Original Icon")
+                Text(document.sourceImage == nil ? "Import your PNG or JPG icon file to get started" : "Original Icon")
                     .font(.headline)
                     .padding(.top)
 
@@ -133,8 +133,9 @@ struct DocumentView: View {
                             Spacer()
                             
                             // Instruction text
-                            Text("Drag layers onto each other to combine them")
+                            Text("Drag layers onto each other to combine them, or use the tools below:")
                                 .font(.callout)
+                                .fontWeight(.bold)
                                 .foregroundColor(.secondary)
                                 .padding(.horizontal)
                                 .padding(.bottom, 8)

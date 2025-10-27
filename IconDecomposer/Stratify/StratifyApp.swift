@@ -109,7 +109,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let hostingController = NSHostingController(rootView: welcomeView)
 
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Welcome to Icon Decomposer"
+        window.title = "Welcome to Stratify"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
         window.center()

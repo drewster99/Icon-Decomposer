@@ -18,23 +18,34 @@ struct LayerFlowGrid: View {
     let onToggle: (UUID) -> Void
     let onDrop: (Layer, Layer) -> Void
 
-    let columns = [
-        GridItem(.adaptive(minimum: 120), spacing: 12)
-    ]
-
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 12) {
-            ForEach(layers) { layer in
-                LayerGridItem(
-                    layer: layer,
-                    isSelected: selectedLayerIDs.contains(layer.id),
-                    onToggle: {
-                        onToggle(layer.id)
-                    },
-                    onDrop: { droppedLayer in
-                        onDrop(droppedLayer, layer)
+        GeometryReader { geometry in
+            let availableWidth = geometry.size.width
+            let spacing: CGFloat = 12
+
+            // Calculate optimal number of columns (3-5 based on width)
+            let columnCount = max(3, min(5, Int(availableWidth / 200)))
+            let totalSpacing = spacing * CGFloat(columnCount - 1)
+            let columnWidth = (availableWidth - totalSpacing) / CGFloat(columnCount)
+
+            let columns = Array(repeating: GridItem(.fixed(columnWidth), spacing: spacing), count: columnCount)
+
+            ScrollView {
+                LazyVGrid(columns: columns, spacing: spacing) {
+                    ForEach(layers) { layer in
+                        LayerGridItem(
+                            layer: layer,
+                            isSelected: selectedLayerIDs.contains(layer.id),
+                            onToggle: {
+                                onToggle(layer.id)
+                            },
+                            onDrop: { droppedLayer in
+                                onDrop(droppedLayer, layer)
+                            }
+                        )
                     }
-                )
+                }
+                .padding(spacing)
             }
         }
     }
@@ -52,19 +63,22 @@ struct LayerGridItem: View {
         VStack(spacing: 8) {
             // Layer thumbnail
             if let image = layer.image {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(minHeight: 120, maxHeight: 400)
-                    .background(CheckerboardBackground())
-                    .cornerRadius(8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(
-                                isDragTarget ? Color.blue : (isSelected ? Color.blue : Color.clear),
-                                lineWidth: isDragTarget ? 3 : (isSelected ? 2 : 0)
-                            )
-                    )
+                GeometryReader { geometry in
+                    Image(nsImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(width: geometry.size.width)
+                        .background(CheckerboardBackground())
+                        .cornerRadius(8)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(
+                                    isDragTarget ? Color.blue : (isSelected ? Color.blue : Color.clear),
+                                    lineWidth: isDragTarget ? 3 : (isSelected ? 2 : 0)
+                                )
+                        )
+                }
+                .aspectRatio(1, contentMode: .fit)
             }
 
             // Layer info

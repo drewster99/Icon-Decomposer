@@ -118,19 +118,16 @@ struct DocumentView: View {
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
 
-                            ScrollView {
-                                LayerFlowGrid(
-                                    layers: document.layers,
-                                    selectedLayerIDs: selectedLayerIDs,
-                                    onToggle: { id in
-                                        toggleLayerSelection(id)
-                                    },
-                                    onDrop: { source, target in
-                                        combineLayers(source: source, target: target)
-                                    }
-                                )
-                                .padding()
-                            }
+                            LayerFlowGrid(
+                                layers: document.layers,
+                                selectedLayerIDs: selectedLayerIDs,
+                                onToggle: { id in
+                                    toggleLayerSelection(id)
+                                },
+                                onDrop: { source, target in
+                                    combineLayers(source: source, target: target)
+                                }
+                            )
 
                             Spacer()
                             

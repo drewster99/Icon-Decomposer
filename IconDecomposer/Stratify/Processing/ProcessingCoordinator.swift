@@ -164,8 +164,19 @@ class ProcessingCoordinator {
     }
 }
 
-enum ProcessingError: Error {
+enum ProcessingError: Error, LocalizedError {
     case notImplemented
     case metalNotAvailable
     case processingFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .notImplemented:
+            return "This feature is not yet implemented"
+        case .metalNotAvailable:
+            return "Metal GPU acceleration is not available on this device"
+        case .processingFailed(let message):
+            return message
+        }
+    }
 }

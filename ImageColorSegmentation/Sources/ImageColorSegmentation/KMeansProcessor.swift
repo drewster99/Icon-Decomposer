@@ -18,7 +18,7 @@ struct KMeansParams {
 }
 
 /// Handles K-means clustering of superpixel features using Metal
-class KMeansProcessor {
+public class KMeansProcessor {
 
     private let device: MTLDevice
     private let library: MTLLibrary
@@ -34,7 +34,7 @@ class KMeansProcessor {
     private var checkConvergencePipeline: MTLComputePipelineState
     private var applyColorWeightingPipeline: MTLComputePipelineState
 
-    init(device: MTLDevice, library: MTLLibrary, commandQueue: MTLCommandQueue) throws {
+    public init(device: MTLDevice, library: MTLLibrary, commandQueue: MTLCommandQueue) throws {
         self.device = device
         self.library = library
         self.commandQueue = commandQueue
@@ -58,16 +58,16 @@ class KMeansProcessor {
     }
 
     /// Result of K-means clustering
-    struct ClusteringResult {
-        let clusterAssignments: [Int32]
-        let clusterCenters: [SIMD3<Float>]
-        let numberOfClusters: Int
-        let iterations: Int
-        let converged: Bool
+    public struct ClusteringResult {
+        public let clusterAssignments: [Int32]
+        public let clusterCenters: [SIMD3<Float>]
+        public let numberOfClusters: Int
+        public let iterations: Int
+        public let converged: Bool
     }
 
     /// Perform K-means++ clustering on superpixel colors
-    func cluster(
+    public func cluster(
         superpixelColors: [SIMD3<Float>],
         numberOfClusters: Int,
         lightnessWeight: Float,
@@ -660,5 +660,394 @@ class KMeansProcessor {
         encoder.endEncoding()
         commandBuffer.commit()
         commandBuffer.waitUntilCompleted()
+    }
+
+    // MARK: - 5D Clustering (Color + Spatial) for Split Layer
+
+    /// Perform K-means++ clustering on superpixel colors AND spatial positions
+    /// This is a NEW method for split layer functionality - does not modify existing cluster() method
+    /// - Parameters:
+    ///   - superpixelColors: LAB color values
+    ///   - superpixelPositions: Normalized XY positions (0-100 scale)
+    ///   - numberOfClusters: K value
+    ///   - colorWeight: Weight for color distance (0-1)
+    ///   - spatialWeight: Weight for spatial distance (0-1)
+    ///   - maxIterations: Maximum iterations
+    ///   - convergenceDistance: Convergence threshold
+    ///   - seed: Random seed
+    /// - Returns: Clustering result with assignments
+    public func clusterWithSpatial(
+        superpixelColors: [SIMD3<Float>],
+        superpixelPositions: [SIMD2<Float>],
+        numberOfClusters: Int,
+        colorWeight: Float,
+        spatialWeight: Float,
+        maxIterations: Int = 300,
+        convergenceDistance: Float = 0.01,
+        seed: Int? = nil
+    ) throws -> ClusteringResult {
+
+        let numPoints = superpixelColors.count
+        let numClusters = numberOfClusters
+
+        guard superpixelColors.count == superpixelPositions.count else {
+            throw PipelineError.executionFailed("Color and position arrays must have same length")
+        }
+
+        // Set random seed if provided
+        if let seed = seed {
+            srand48(seed)
+        }
+
+        // Create Metal buffers for colors and positions
+        guard let colorsBuffer = device.makeBuffer(
+            bytes: superpixelColors,
+            length: MemoryLayout<SIMD3<Float>>.size * numPoints,
+            options: .storageModeShared
+        ),
+        let positionsBuffer = device.makeBuffer(
+            bytes: superpixelPositions,
+            length: MemoryLayout<SIMD2<Float>>.size * numPoints,
+            options: .storageModeShared
+        ) else {
+            throw PipelineError.executionFailed("Failed to create input buffers")
+        }
+
+        // Initialize centers using K-means++ (using just colors for initialization)
+        let initialColorCenters = try initializeKMeansPlusPlus(
+            colors: colorsBuffer,
+            numPoints: numPoints,
+            numClusters: numClusters
+        )
+
+        // Initialize spatial centers by finding superpixels closest to color centers
+        var initialSpatialCenters: [SIMD2<Float>] = []
+        for colorCenter in initialColorCenters {
+            // Find superpixel with closest color
+            var minDist: Float = .infinity
+            var closestIdx = 0
+            for (idx, color) in superpixelColors.enumerated() {
+                let dist = simd_distance(color, colorCenter)
+                if dist < minDist {
+                    minDist = dist
+                    closestIdx = idx
+                }
+            }
+            initialSpatialCenters.append(superpixelPositions[closestIdx])
+        }
+
+        // Create buffers for centers
+        var colorCentersBuffer = device.makeBuffer(
+            bytes: initialColorCenters,
+            length: MemoryLayout<SIMD3<Float>>.size * numClusters,
+            options: .storageModeShared
+        )!
+
+        var spatialCentersBuffer = device.makeBuffer(
+            bytes: initialSpatialCenters,
+            length: MemoryLayout<SIMD2<Float>>.size * numClusters,
+            options: .storageModeShared
+        )!
+
+        var newColorCentersBuffer = device.makeBuffer(
+            length: MemoryLayout<SIMD3<Float>>.size * numClusters,
+            options: .storageModeShared
+        )!
+
+        var newSpatialCentersBuffer = device.makeBuffer(
+            length: MemoryLayout<SIMD2<Float>>.size * numClusters,
+            options: .storageModeShared
+        )!
+
+        let assignmentsBuffer = device.makeBuffer(
+            length: MemoryLayout<Int32>.size * numPoints,
+            options: .storageModeShared
+        )!
+
+        let distancesBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size * numPoints,
+            options: .storageModeShared
+        )!
+
+        let colorSumsBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size * numClusters * 3,
+            options: .storageModeShared
+        )!
+
+        let spatialSumsBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size * numClusters * 2,
+            options: .storageModeShared
+        )!
+
+        let clusterCountsBuffer = device.makeBuffer(
+            length: MemoryLayout<Int32>.size * numClusters,
+            options: .storageModeShared
+        )!
+
+        let centerDeltasBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size * numClusters,
+            options: .storageModeShared
+        )!
+
+        let totalDeltaBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size,
+            options: .storageModeShared
+        )!
+
+        // Create pipeline states for 5D kernels
+        let assignPointsPipeline = try Self.createPipeline(library: library, device: device, name: "assignPointsToClusters5D")
+        let accumulatePipeline = try Self.createPipeline(library: library, device: device, name: "accumulateClusterData5D")
+        let updateCentersPipeline = try Self.createPipeline(library: library, device: device, name: "updateClusterCenters5D")
+
+        // Main iteration loop
+        var iteration = 0
+        var converged = false
+
+        for i in 0..<maxIterations {
+            iteration = i
+
+            // Assignment step
+            try assignPointsToCluster5D(
+                colorsBuffer: colorsBuffer,
+                positionsBuffer: positionsBuffer,
+                colorCentersBuffer: colorCentersBuffer,
+                spatialCentersBuffer: spatialCentersBuffer,
+                assignmentsBuffer: assignmentsBuffer,
+                distancesBuffer: distancesBuffer,
+                pipeline: assignPointsPipeline,
+                numPoints: numPoints,
+                numClusters: numClusters,
+                colorWeight: colorWeight,
+                spatialWeight: spatialWeight
+            )
+
+            // Clear accumulators
+            memset(colorSumsBuffer.contents(), 0, colorSumsBuffer.length)
+            memset(spatialSumsBuffer.contents(), 0, spatialSumsBuffer.length)
+            memset(clusterCountsBuffer.contents(), 0, clusterCountsBuffer.length)
+
+            // Accumulate cluster data
+            try accumulateClusterData5D(
+                colorsBuffer: colorsBuffer,
+                positionsBuffer: positionsBuffer,
+                assignmentsBuffer: assignmentsBuffer,
+                colorSumsBuffer: colorSumsBuffer,
+                spatialSumsBuffer: spatialSumsBuffer,
+                clusterCountsBuffer: clusterCountsBuffer,
+                pipeline: accumulatePipeline,
+                numPoints: numPoints,
+                numClusters: numClusters,
+                colorWeight: colorWeight,
+                spatialWeight: spatialWeight
+            )
+
+            // Update centers
+            try updateClusterCenters5D(
+                colorSumsBuffer: colorSumsBuffer,
+                spatialSumsBuffer: spatialSumsBuffer,
+                clusterCountsBuffer: clusterCountsBuffer,
+                newColorCentersBuffer: newColorCentersBuffer,
+                newSpatialCentersBuffer: newSpatialCentersBuffer,
+                oldColorCentersBuffer: colorCentersBuffer,
+                oldSpatialCentersBuffer: spatialCentersBuffer,
+                centerDeltasBuffer: centerDeltasBuffer,
+                pipeline: updateCentersPipeline,
+                numClusters: numClusters,
+                colorWeight: colorWeight,
+                spatialWeight: spatialWeight
+            )
+
+            // Check convergence
+            memset(totalDeltaBuffer.contents(), 0, totalDeltaBuffer.length)
+            try checkConvergence(
+                centerDeltas: centerDeltasBuffer,
+                totalDelta: totalDeltaBuffer,
+                numClusters: numClusters
+            )
+
+            let totalDelta = totalDeltaBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee
+            if totalDelta < convergenceDistance {
+                converged = true
+                break
+            }
+
+            // Swap buffers
+            swap(&colorCentersBuffer, &newColorCentersBuffer)
+            swap(&spatialCentersBuffer, &newSpatialCentersBuffer)
+        }
+
+        // Extract final results
+        let assignmentsPointer = assignmentsBuffer.contents().bindMemory(to: Int32.self, capacity: numPoints)
+        let clusterAssignments = Array(UnsafeBufferPointer(start: assignmentsPointer, count: numPoints))
+
+        let colorCentersPointer = colorCentersBuffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: numClusters)
+        let clusterCenters = Array(UnsafeBufferPointer(start: colorCentersPointer, count: numClusters))
+
+        return ClusteringResult(
+            clusterAssignments: clusterAssignments,
+            clusterCenters: clusterCenters,
+            numberOfClusters: numClusters,
+            iterations: iteration + 1,
+            converged: converged
+        )
+    }
+
+    // MARK: - 5D Clustering Helper Methods
+
+    private func assignPointsToCluster5D(
+        colorsBuffer: MTLBuffer,
+        positionsBuffer: MTLBuffer,
+        colorCentersBuffer: MTLBuffer,
+        spatialCentersBuffer: MTLBuffer,
+        assignmentsBuffer: MTLBuffer,
+        distancesBuffer: MTLBuffer,
+        pipeline: MTLComputePipelineState,
+        numPoints: Int,
+        numClusters: Int,
+        colorWeight: Float,
+        spatialWeight: Float
+    ) throws {
+        var params = KMeansParams5D(
+            numPoints: UInt32(numPoints),
+            numClusters: UInt32(numClusters),
+            iteration: 0,
+            convergenceThreshold: 0,
+            colorWeight: colorWeight,
+            spatialWeight: spatialWeight
+        )
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw PipelineError.executionFailed("Failed to create command buffer/encoder")
+        }
+
+        encoder.setComputePipelineState(pipeline)
+        encoder.setBuffer(colorsBuffer, offset: 0, index: 0)
+        encoder.setBuffer(positionsBuffer, offset: 0, index: 1)
+        encoder.setBuffer(colorCentersBuffer, offset: 0, index: 2)
+        encoder.setBuffer(spatialCentersBuffer, offset: 0, index: 3)
+        encoder.setBuffer(assignmentsBuffer, offset: 0, index: 4)
+        encoder.setBuffer(distancesBuffer, offset: 0, index: 5)
+        encoder.setBytes(&params, length: MemoryLayout<KMeansParams5D>.size, index: 6)
+
+        let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
+        let threadgroupsPerGrid = MTLSize(
+            width: (numPoints + 255) / 256,
+            height: 1,
+            depth: 1
+        )
+        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+    }
+
+    private func accumulateClusterData5D(
+        colorsBuffer: MTLBuffer,
+        positionsBuffer: MTLBuffer,
+        assignmentsBuffer: MTLBuffer,
+        colorSumsBuffer: MTLBuffer,
+        spatialSumsBuffer: MTLBuffer,
+        clusterCountsBuffer: MTLBuffer,
+        pipeline: MTLComputePipelineState,
+        numPoints: Int,
+        numClusters: Int,
+        colorWeight: Float,
+        spatialWeight: Float
+    ) throws {
+        var params = KMeansParams5D(
+            numPoints: UInt32(numPoints),
+            numClusters: UInt32(numClusters),
+            iteration: 0,
+            convergenceThreshold: 0,
+            colorWeight: colorWeight,
+            spatialWeight: spatialWeight
+        )
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw PipelineError.executionFailed("Failed to create command buffer/encoder")
+        }
+
+        encoder.setComputePipelineState(pipeline)
+        encoder.setBuffer(colorsBuffer, offset: 0, index: 0)
+        encoder.setBuffer(positionsBuffer, offset: 0, index: 1)
+        encoder.setBuffer(assignmentsBuffer, offset: 0, index: 2)
+        encoder.setBuffer(colorSumsBuffer, offset: 0, index: 3)
+        encoder.setBuffer(spatialSumsBuffer, offset: 0, index: 4)
+        encoder.setBuffer(clusterCountsBuffer, offset: 0, index: 5)
+        encoder.setBytes(&params, length: MemoryLayout<KMeansParams5D>.size, index: 6)
+
+        let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
+        let threadgroupsPerGrid = MTLSize(
+            width: (numPoints + 255) / 256,
+            height: 1,
+            depth: 1
+        )
+        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+    }
+
+    private func updateClusterCenters5D(
+        colorSumsBuffer: MTLBuffer,
+        spatialSumsBuffer: MTLBuffer,
+        clusterCountsBuffer: MTLBuffer,
+        newColorCentersBuffer: MTLBuffer,
+        newSpatialCentersBuffer: MTLBuffer,
+        oldColorCentersBuffer: MTLBuffer,
+        oldSpatialCentersBuffer: MTLBuffer,
+        centerDeltasBuffer: MTLBuffer,
+        pipeline: MTLComputePipelineState,
+        numClusters: Int,
+        colorWeight: Float,
+        spatialWeight: Float
+    ) throws {
+        var params = KMeansParams5D(
+            numPoints: 0,
+            numClusters: UInt32(numClusters),
+            iteration: 0,
+            convergenceThreshold: 0,
+            colorWeight: colorWeight,
+            spatialWeight: spatialWeight
+        )
+
+        guard let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw PipelineError.executionFailed("Failed to create command buffer/encoder")
+        }
+
+        encoder.setComputePipelineState(pipeline)
+        encoder.setBuffer(colorSumsBuffer, offset: 0, index: 0)
+        encoder.setBuffer(spatialSumsBuffer, offset: 0, index: 1)
+        encoder.setBuffer(clusterCountsBuffer, offset: 0, index: 2)
+        encoder.setBuffer(newColorCentersBuffer, offset: 0, index: 3)
+        encoder.setBuffer(newSpatialCentersBuffer, offset: 0, index: 4)
+        encoder.setBuffer(oldColorCentersBuffer, offset: 0, index: 5)
+        encoder.setBuffer(oldSpatialCentersBuffer, offset: 0, index: 6)
+        encoder.setBuffer(centerDeltasBuffer, offset: 0, index: 7)
+        encoder.setBytes(&params, length: MemoryLayout<KMeansParams5D>.size, index: 8)
+
+        let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
+        let threadgroupsPerGrid = MTLSize(
+            width: (numClusters + 255) / 256,
+            height: 1,
+            depth: 1
+        )
+        encoder.dispatchThreadgroups(threadgroupsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
+        encoder.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+    }
+
+    // Params struct for 5D clustering (matches Metal struct)
+    private struct KMeansParams5D {
+        let numPoints: UInt32
+        let numClusters: UInt32
+        let iteration: UInt32
+        let convergenceThreshold: Float
+        let colorWeight: Float
+        let spatialWeight: Float
     }
 }

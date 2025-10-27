@@ -273,3 +273,181 @@ kernel void parallelSum(
         output[gid / tgSize] = shared[0];
     }
 }
+
+// ============================================================================
+// NEW: 5D Clustering Kernels (LAB + XY spatial) - For split layer feature
+// ============================================================================
+
+// Structure for 5D clustering parameters (adds weights for color vs spatial)
+struct KMeansParams5D {
+    uint numPoints;
+    uint numClusters;
+    uint iteration;
+    float convergenceThreshold;
+    float colorWeight;    // Weight for LAB distance
+    float spatialWeight;  // Weight for XY distance
+};
+
+// Calculate weighted distance between 5D points (LAB + XY)
+inline float calculateWeightedDistance5D(
+    float3 colorA,
+    float2 spatialA,
+    float3 colorB,
+    float2 spatialB,
+    float colorWeight,
+    float spatialWeight)
+{
+    float3 colorDiff = colorA - colorB;
+    float2 spatialDiff = spatialA - spatialB;
+
+    float colorDist = length(colorDiff);
+    float spatialDist = length(spatialDiff);
+
+    // Weighted combined distance
+    float weightedColorDist = colorDist * colorWeight;
+    float weightedSpatialDist = spatialDist * spatialWeight;
+
+    return sqrt(weightedColorDist * weightedColorDist + weightedSpatialDist * weightedSpatialDist);
+}
+
+// Calculate minimum distance from each point to any existing center (5D)
+kernel void calculateMinDistances5D(
+    device const float3* colorPoints [[buffer(0)]],      // LAB colors
+    device const float2* spatialPoints [[buffer(1)]],    // XY positions
+    device const float3* colorCenters [[buffer(2)]],     // Cluster color centers
+    device const float2* spatialCenters [[buffer(3)]],   // Cluster spatial centers
+    device float* minDistances [[buffer(4)]],            // Output: min distance
+    constant KMeansParams5D& params [[buffer(5)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= params.numPoints) return;
+
+    float3 pointColor = colorPoints[gid];
+    float2 pointSpatial = spatialPoints[gid];
+    float minDist = INFINITY;
+
+    for (uint i = 0; i < params.numClusters; i++) {
+        float dist = calculateWeightedDistance5D(
+            pointColor, pointSpatial,
+            colorCenters[i], spatialCenters[i],
+            params.colorWeight, params.spatialWeight
+        );
+        minDist = min(minDist, dist);
+    }
+
+    minDistances[gid] = minDist;
+}
+
+// Assign each point to its nearest cluster center (5D)
+kernel void assignPointsToClusters5D(
+    device const float3* colorPoints [[buffer(0)]],      // LAB colors
+    device const float2* spatialPoints [[buffer(1)]],    // XY positions
+    device const float3* colorCenters [[buffer(2)]],     // Cluster color centers
+    device const float2* spatialCenters [[buffer(3)]],   // Cluster spatial centers
+    device int* assignments [[buffer(4)]],               // Output: assignments
+    device float* distances [[buffer(5)]],               // Output: distances
+    constant KMeansParams5D& params [[buffer(6)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= params.numPoints) return;
+
+    float3 pointColor = colorPoints[gid];
+    float2 pointSpatial = spatialPoints[gid];
+    float minDist = INFINITY;
+    int nearestCluster = 0;
+
+    for (uint i = 0; i < params.numClusters; i++) {
+        float dist = calculateWeightedDistance5D(
+            pointColor, pointSpatial,
+            colorCenters[i], spatialCenters[i],
+            params.colorWeight, params.spatialWeight
+        );
+
+        if (dist < minDist) {
+            minDist = dist;
+            nearestCluster = i;
+        }
+    }
+
+    assignments[gid] = nearestCluster;
+    distances[gid] = minDist;
+}
+
+// Accumulate cluster data (5D) - separate color and spatial sums
+kernel void accumulateClusterData5D(
+    device const float3* colorPoints [[buffer(0)]],      // LAB colors
+    device const float2* spatialPoints [[buffer(1)]],    // XY positions
+    device const int* assignments [[buffer(2)]],         // Assignments
+    device atomic_float* colorSums [[buffer(3)]],        // Output: color sums (3 per cluster)
+    device atomic_float* spatialSums [[buffer(4)]],      // Output: spatial sums (2 per cluster)
+    device atomic_int* clusterCounts [[buffer(5)]],      // Output: counts
+    constant KMeansParams5D& params [[buffer(6)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= params.numPoints) return;
+
+    int clusterId = assignments[gid];
+    float3 color = colorPoints[gid];
+    float2 spatial = spatialPoints[gid];
+
+    // Accumulate color (LAB)
+    uint colorOffset = clusterId * 3;
+    atomic_fetch_add_explicit(&colorSums[colorOffset + 0], color.x, memory_order_relaxed);
+    atomic_fetch_add_explicit(&colorSums[colorOffset + 1], color.y, memory_order_relaxed);
+    atomic_fetch_add_explicit(&colorSums[colorOffset + 2], color.z, memory_order_relaxed);
+
+    // Accumulate spatial (XY)
+    uint spatialOffset = clusterId * 2;
+    atomic_fetch_add_explicit(&spatialSums[spatialOffset + 0], spatial.x, memory_order_relaxed);
+    atomic_fetch_add_explicit(&spatialSums[spatialOffset + 1], spatial.y, memory_order_relaxed);
+
+    // Accumulate count
+    atomic_fetch_add_explicit(&clusterCounts[clusterId], 1, memory_order_relaxed);
+}
+
+// Update cluster centers (5D)
+kernel void updateClusterCenters5D(
+    device const float* colorSums [[buffer(0)]],         // Color sums (flat array)
+    device const float* spatialSums [[buffer(1)]],       // Spatial sums (flat array)
+    device const int* clusterCounts [[buffer(2)]],       // Counts
+    device float3* newColorCenters [[buffer(3)]],        // Output: new color centers
+    device float2* newSpatialCenters [[buffer(4)]],      // Output: new spatial centers
+    device const float3* oldColorCenters [[buffer(5)]],  // Old color centers
+    device const float2* oldSpatialCenters [[buffer(6)]], // Old spatial centers
+    device float* centerDeltas [[buffer(7)]],            // Output: movement
+    constant KMeansParams5D& params [[buffer(8)]],
+    uint gid [[thread_position_in_grid]])
+{
+    if (gid >= params.numClusters) return;
+
+    int count = clusterCounts[gid];
+
+    if (count > 0) {
+        // Calculate new color center
+        uint colorOffset = gid * 3;
+        float3 colorSum = float3(
+            colorSums[colorOffset + 0],
+            colorSums[colorOffset + 1],
+            colorSums[colorOffset + 2]
+        );
+        newColorCenters[gid] = colorSum / float(count);
+
+        // Calculate new spatial center
+        uint spatialOffset = gid * 2;
+        float2 spatialSum = float2(
+            spatialSums[spatialOffset + 0],
+            spatialSums[spatialOffset + 1]
+        );
+        newSpatialCenters[gid] = spatialSum / float(count);
+
+        // Calculate total movement (combined color + spatial)
+        float colorDelta = length(newColorCenters[gid] - oldColorCenters[gid]);
+        float spatialDelta = length(newSpatialCenters[gid] - oldSpatialCenters[gid]);
+        centerDeltas[gid] = colorDelta + spatialDelta;
+    } else {
+        // Empty cluster - keep old centers
+        newColorCenters[gid] = oldColorCenters[gid];
+        newSpatialCenters[gid] = oldSpatialCenters[gid];
+        centerDeltas[gid] = 0.0;
+    }
+}

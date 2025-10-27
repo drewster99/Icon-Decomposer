@@ -11,9 +11,12 @@ import ImageColorSegmentation
 
 struct DocumentView: View {
     @ObservedObject var document: IconDecomposerDocument
+    @Environment(\.undoManager) var undoManager
 
     @State private var isProcessing = false
     @State private var selectedLayerIDs = Set<UUID>()
+    @State private var errorMessage: String?
+    @State private var showingError = false
 
     var body: some View {
         HSplitView {
@@ -50,7 +53,7 @@ struct DocumentView: View {
                 } else {
                     // Import screen
                     ImportIconView { selectedImage in
-                        document.setSourceImage(selectedImage)
+                        document.setSourceImage(selectedImage, actionName: "Import Icon")
                         // Automatically analyze after import
                         analyzeIcon()
                     }
@@ -142,6 +145,16 @@ struct DocumentView: View {
             .frame(minWidth: 500)
         }
         .frame(minWidth: 900, minHeight: 600)
+        .onAppear {
+            document.undoManager = undoManager
+        }
+        .alert("Split Layer Error", isPresented: $showingError) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            if let errorMessage = errorMessage {
+                Text(errorMessage)
+            }
+        }
     }
 
     // MARK: - Actions
@@ -154,7 +167,7 @@ struct DocumentView: View {
 
         if panel.runModal() == .OK, let url = panel.url {
             if let image = NSImage(contentsOf: url) {
-                document.setSourceImage(image)
+                document.setSourceImage(image, actionName: "Import Icon")
             }
         }
     }
@@ -172,7 +185,7 @@ struct DocumentView: View {
                 )
 
                 await MainActor.run {
-                    document.updateLayers(layers)
+                    document.updateLayers(layers, actionName: "Analyze Icon")
                     isProcessing = false
                 }
             } catch {
@@ -180,7 +193,7 @@ struct DocumentView: View {
                     print("Processing error: \(error)")
                     // For now, use dummy layers until package is integrated
                     let dummyLayers = createDummyLayers(from: sourceImage)
-                    document.updateLayers(dummyLayers)
+                    document.updateLayers(dummyLayers, actionName: "Analyze Icon")
                     isProcessing = false
                 }
             }
@@ -276,7 +289,7 @@ struct DocumentView: View {
                 }
 
                 await MainActor.run {
-                    document.updateLayers(layers)
+                    document.updateLayers(layers, actionName: "Auto-Merge Layers")
                     isProcessing = false
                 }
             } catch {
@@ -289,84 +302,31 @@ struct DocumentView: View {
     }
 
     private func combineLayers(source: Layer, target: Layer) {
-        guard let sourceImage = source.image,
-              let targetImage = target.image else { return }
-
-        // Combine the two images by compositing
-        let size = sourceImage.size
-        let combinedImage = NSImage(size: size)
-
-        combinedImage.lockFocus()
-        targetImage.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-        sourceImage.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-        combinedImage.unlockFocus()
-
-        // Create combined layer
-        let combinedLayer = Layer(
-            name: target.name, // Keep target's name
-            image: combinedImage,
-            pixelCount: source.pixelCount + target.pixelCount,
-            averageColor: target.averageColor, // Use target's color
-            isSelected: true
-        )
-
-        // Remove both source and target, add combined
-        var newLayers = document.layers.filter { $0.id != source.id && $0.id != target.id }
-        newLayers.append(combinedLayer)
-        newLayers.sort { $0.pixelCount > $1.pixelCount }
-
-        document.updateLayers(newLayers)
+        document.combineLayers(source: source, target: target)
         selectedLayerIDs.remove(source.id)
         selectedLayerIDs.remove(target.id)
     }
 
     private func combineSelectedLayers() {
-        guard selectedLayerIDs.count >= 2 else { return }
-
-        let selectedLayers = document.layers.filter { selectedLayerIDs.contains($0.id) }
-        guard let firstLayer = selectedLayers.first else { return }
-
-        // Combine all selected layers into the first one
-        var combinedImage = firstLayer.image
-        var totalPixelCount = firstLayer.pixelCount
-
-        for layer in selectedLayers.dropFirst() {
-            guard let layerImage = layer.image,
-                  let combined = combinedImage else { continue }
-
-            let size = combined.size
-            let newCombined = NSImage(size: size)
-
-            newCombined.lockFocus()
-            combined.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-            layerImage.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-            newCombined.unlockFocus()
-
-            combinedImage = newCombined
-            totalPixelCount += layer.pixelCount
-        }
-
-        guard let finalImage = combinedImage else { return }
-
-        let combinedLayer = Layer(
-            name: firstLayer.name,
-            image: finalImage,
-            pixelCount: totalPixelCount,
-            averageColor: firstLayer.averageColor,
-            isSelected: true
-        )
-
-        // Remove all selected layers, add combined
-        var newLayers = document.layers.filter { !selectedLayerIDs.contains($0.id) }
-        newLayers.append(combinedLayer)
-        newLayers.sort { $0.pixelCount > $1.pixelCount }
-
-        document.updateLayers(newLayers)
+        document.combineSelectedLayers(selectedLayerIDs)
         selectedLayerIDs.removeAll()
     }
 
     private func splitSelectedLayer() {
-        // TODO: Implement layer splitting
+        guard selectedLayerIDs.count == 1,
+              let layerID = selectedLayerIDs.first else { return }
+
+        Task {
+            do {
+                try await document.splitLayer(layerID)
+                selectedLayerIDs.removeAll()
+            } catch {
+                await MainActor.run {
+                    errorMessage = error.localizedDescription
+                    showingError = true
+                }
+            }
+        }
     }
 
     private func exportIconBundle() {

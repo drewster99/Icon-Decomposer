@@ -11,7 +11,7 @@ import MetalKit
 import CoreGraphics
 
 /// Handles SLIC superpixel segmentation using Metal shaders
-class SLICProcessor {
+public class SLICProcessor {
 
     private let device: MTLDevice
     private let library: MTLLibrary
@@ -27,7 +27,7 @@ class SLICProcessor {
     private var clearDistancesPipeline: MTLComputePipelineState
     private var enforceConnectivityPipeline: MTLComputePipelineState
 
-    init(device: MTLDevice, library: MTLLibrary) throws {
+    public init(device: MTLDevice, library: MTLLibrary) throws {
         self.device = device
         self.library = library
 
@@ -51,7 +51,7 @@ class SLICProcessor {
     }
 
     /// Process SLIC segmentation within the pipeline
-    func processSLIC(
+    public func processSLIC(
         inputTexture: MTLTexture,
         commandQueue: MTLCommandQueue,
         nSegments: Int,

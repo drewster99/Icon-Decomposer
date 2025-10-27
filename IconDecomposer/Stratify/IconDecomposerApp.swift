@@ -41,6 +41,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // Prevent any automatic document opening during launch
+        // This must be set early to prevent the open panel from appearing
+        UserDefaults.standard.set(false, forKey: "NSShowAppCentricOpenPanelInsteadOfUntitledFile")
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -63,6 +65,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func application(_ sender: NSApplication, openFile filename: String) -> Bool {
         // Allow opening files when double-clicked
         return hasFinishedLaunching
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        // Only process file opens after launch completes
+        guard hasFinishedLaunching else { return }
+
+        for url in urls {
+            NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
+        }
     }
 
     func applicationShouldAutomaticallyLocalizeKeyEquivalents(_ application: NSApplication) -> Bool {

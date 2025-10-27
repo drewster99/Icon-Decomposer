@@ -9,7 +9,7 @@ import Foundation
 import CoreGraphics
 import Metal
 
-class LayerExtractor {
+public class LayerExtractor {
 
     private let device: MTLDevice
     private let library: MTLLibrary
@@ -18,7 +18,7 @@ class LayerExtractor {
     // Pipeline state
     private var extractLayerPipeline: MTLComputePipelineState
 
-    init(device: MTLDevice, library: MTLLibrary, commandQueue: MTLCommandQueue) throws {
+    public init(device: MTLDevice, library: MTLLibrary, commandQueue: MTLCommandQueue) throws {
         self.device = device
         self.library = library
         self.commandQueue = commandQueue
@@ -30,7 +30,7 @@ class LayerExtractor {
     }
 
     /// Extract layers from clustering results using GPU acceleration
-    func extractLayersGPU(
+    public func extractLayersGPU(
         originalImageBuffer: MTLBuffer,
         pixelClusters: [UInt32],
         numberOfClusters: Int,
@@ -99,7 +99,7 @@ class LayerExtractor {
     }
 
     /// Map cluster assignments to pixels
-    static func mapClustersToPixels(
+    public static func mapClustersToPixels(
         clusterAssignments: [Int32],
         superpixelData: SuperpixelProcessor.SuperpixelData,
         labelMap: [UInt32]

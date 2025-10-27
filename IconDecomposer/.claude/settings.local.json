@@ -7,7 +7,12 @@
       "mcp__xcode-mcp-server__get_project_schemes",
       "Bash(say:*)",
       "mcp__xcode-mcp-server__build_project",
-      "mcp__xcode-mcp-server__clean_project"
+      "mcp__xcode-mcp-server__clean_project",
+      "Bash(plutil:*)",
+      "Read(//Users/andrew/cursor/icon-decomposer/**)",
+      "mcp__xcode-mcp-server__get_directory_listing",
+      "Bash(git log:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

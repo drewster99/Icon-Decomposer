@@ -17,7 +17,7 @@ struct SuperpixelExtractionParams {
 }
 
 /// Processes SLIC output to extract superpixel features for clustering
-class SuperpixelProcessor {
+public class SuperpixelProcessor {
 
     private let device: MTLDevice
     private let library: MTLLibrary
@@ -26,7 +26,7 @@ class SuperpixelProcessor {
     // Pipeline states
     private var accumulateSuperpixelFeaturesPipeline: MTLComputePipelineState
 
-    init(device: MTLDevice, library: MTLLibrary, commandQueue: MTLCommandQueue) throws {
+    public init(device: MTLDevice, library: MTLLibrary, commandQueue: MTLCommandQueue) throws {
         self.device = device
         self.library = library
         self.commandQueue = commandQueue
@@ -38,21 +38,21 @@ class SuperpixelProcessor {
     }
 
     /// Represents a superpixel with its average color and metadata
-    struct Superpixel {
-        let id: Int
-        let labColor: SIMD3<Float>
-        let pixelCount: Int
-        let centerPosition: SIMD2<Float>
+    public struct Superpixel {
+        public let id: Int
+        public let labColor: SIMD3<Float>
+        public let pixelCount: Int
+        public let centerPosition: SIMD2<Float>
     }
 
     /// Result containing processed superpixel data
-    struct SuperpixelData {
-        let superpixels: [Superpixel]
-        let numSuperpixels: Int
+    public struct SuperpixelData {
+        public let superpixels: [Superpixel]
+        public let numSuperpixels: Int
     }
 
     /// Extract superpixel features using Metal GPU acceleration
-    func extractSuperpixelsMetal(
+    public func extractSuperpixelsMetal(
         from labBuffer: MTLBuffer,
         labelsBuffer: MTLBuffer,
         width: Int,
@@ -179,7 +179,26 @@ class SuperpixelProcessor {
     }
 
     /// Extract LAB color features from superpixel data
-    static func extractColorFeatures(from superpixelData: SuperpixelData) -> [SIMD3<Float>] {
+    public static func extractColorFeatures(from superpixelData: SuperpixelData) -> [SIMD3<Float>] {
         return superpixelData.superpixels.map { $0.labColor }
+    }
+
+    /// Extract spatial features (normalized XY positions) from superpixel data
+    /// - Parameters:
+    ///   - superpixelData: Superpixel data with center positions
+    ///   - imageWidth: Image width for normalization
+    ///   - imageHeight: Image height for normalization
+    /// - Returns: Array of normalized (x, y) positions scaled to 0-100 range
+    public static func extractSpatialFeatures(
+        from superpixelData: SuperpixelData,
+        imageWidth: Int,
+        imageHeight: Int
+    ) -> [SIMD2<Float>] {
+        return superpixelData.superpixels.map { superpixel in
+            // Normalize to 0-100 range to match LAB scale
+            let normalizedX = (superpixel.centerPosition.x / Float(imageWidth)) * 100.0
+            let normalizedY = (superpixel.centerPosition.y / Float(imageHeight)) * 100.0
+            return SIMD2<Float>(normalizedX, normalizedY)
+        }
     }
 }

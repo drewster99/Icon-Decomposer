@@ -33,7 +33,31 @@ struct AppInfo {
         }
         return url
     }
-    
+
+    /// Company website URL
+    static var websiteURL: URL {
+        guard let url = URL(string: "https://nuclearcyborg.com") else {
+            fatalError("AppInfo: Can't create websiteURL")
+        }
+        return url
+    }
+
+    /// Privacy Policy URL
+    static var privacyPolicyURL: URL {
+        guard let url = URL(string: "https://nuclearcyborg.com/privacy") else {
+            fatalError("AppInfo: Can't create privacyPolicyURL")
+        }
+        return url
+    }
+
+    /// Terms of Use URL
+    static var termsOfUseURL: URL {
+        guard let url = URL(string: "https://nuclearcyborg.com/terms") else {
+            fatalError("AppInfo: Can't create termsOfUseURL")
+        }
+        return url
+    }
+
 //    /// API login URL for this app
 //    static let appAPILoginURL: URL = {
 //        guard let url = URL(string: "https://us-central1-photocaloriecam.cloudfunctions.net/login") else {

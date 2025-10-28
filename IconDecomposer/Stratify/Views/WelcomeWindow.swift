@@ -9,6 +9,8 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct WelcomeWindow: View {
+    var onGetStarted: () -> Void
+
     var body: some View {
         VStack(spacing: 30) {
             // Header
@@ -115,23 +117,19 @@ struct WelcomeWindow: View {
     }
 
     private func getStarted() {
-        closeWelcomeWindow()
-
-        // Create a new empty document (same as File -> New)
-        NSDocumentController.shared.newDocument(nil)
-    }
-
-    // Temporary storage for image dropped on welcome screen
-    static var pendingImage: NSImage?
-
-    private func closeWelcomeWindow() {
         // Close the welcome window
         if let window = NSApplication.shared.windows.first(where: { $0.title == "Welcome to Stratify" }) {
             window.close()
         }
+
+        // Call the callback to switch scenes and create new document
+        onGetStarted()
     }
+
+    // Temporary storage for image dropped on welcome screen
+    static var pendingImage: NSImage?
 }
 
 #Preview {
-    WelcomeWindow()
+    WelcomeWindow(onGetStarted: {})
 }

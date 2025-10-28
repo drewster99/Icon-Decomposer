@@ -12,23 +12,25 @@ class CreditsScene: SKScene {
     override func didMove(to view: SKView) {
         backgroundColor = .black
 
-        let creditsLabel = SKLabelNode(fontNamed: "Courier-Bold")
+        let creditsLabel = SKLabelNode(fontNamed: "PT Mono")
         creditsLabel.text = "CREDITS 01"
         creditsLabel.fontSize = 48
         creditsLabel.fontColor = .white
         creditsLabel.position = CGPoint(x: size.width / 2, y: size.height / 2)
         addChild(creditsLabel)
 
-        let instructionLabel = SKLabelNode(fontNamed: "Courier")
-        instructionLabel.text = "Press SPACE or CLICK to start"
-        instructionLabel.fontSize = 18
+        let instructionLabel = SKLabelNode(fontNamed: "PT Mono")
+        instructionLabel.text = "CLICK TO START"
+        instructionLabel.fontSize = 48
         instructionLabel.fontColor = .gray
-        instructionLabel.position = CGPoint(x: size.width / 2, y: size.height / 2 - 60)
+        instructionLabel.position = CGPoint(x: size.width / 2, y: size.height / 2 - 90)
         addChild(instructionLabel)
 
         let blinkAction = SKAction.sequence([
-            SKAction.fadeAlpha(to: 0.3, duration: 0.5),
-            SKAction.fadeAlpha(to: 1.0, duration: 0.5)
+            SKAction.fadeAlpha(to: 0.3, duration: 0.01),
+            SKAction.wait(forDuration: 1.0),
+            SKAction.fadeAlpha(to: 1.0, duration: 0.01),
+            SKAction.wait(forDuration: 2.5)
         ])
         instructionLabel.run(SKAction.repeatForever(blinkAction))
     }

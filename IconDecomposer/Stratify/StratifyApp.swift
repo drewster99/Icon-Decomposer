@@ -10,6 +10,7 @@ import SwiftUI
 @main
 struct StratifyApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @AppStorage("ShouldShowWelcome") private var shouldShowWelcome = true
 
     var body: some Scene {
         // Document-based scene
@@ -24,84 +25,83 @@ struct StratifyApp: App {
                 .keyboardShortcut("n", modifiers: [.command])
             }
 
+            CommandGroup(replacing: .appInfo) {
+                Button("About \(AppInfo.appName)") {
+                    appDelegate.showAboutWindow()
+                }
+            }
+
             CommandGroup(replacing: .help) {
                 Button("\(AppInfo.appName) Help") {
                     // TODO: Open help
                 }
             }
         }
+
+        // Welcome window (shown conditionally via AppDelegate)
+        WindowGroup("Welcome", id: "welcome") {
+            WelcomeWindow(onGetStarted: {
+                // Close welcome window
+                if let window = NSApplication.shared.windows.first(where: { $0.identifier?.rawValue == "welcome" }) {
+                    window.close()
+                }
+                // Create new document
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    NSDocumentController.shared.newDocument(nil)
+                }
+            })
+        }
+        .handlesExternalEvents(matching: Set(arrayLiteral: "welcome"))
     }
 }
 
 // MARK: - App Delegate
 
 class AppDelegate: NSObject, NSApplicationDelegate {
-    var welcomeWindowController: NSWindowController?
-    private var hasFinishedLaunching = false
+    var aboutWindowController: NSWindowController?
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // Prevent any automatic document opening during launch
-        // This must be set early to prevent the open panel from appearing
+        // Prevent automatic document creation
         UserDefaults.standard.set(false, forKey: "NSShowAppCentricOpenPanelInsteadOfUntitledFile")
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Close any automatically opened documents
-        DispatchQueue.main.async {
-            for document in NSDocumentController.shared.documents {
-                document.close()
-            }
-
-            // Show welcome window only if it's been more than 60 days since last launch
-            if self.shouldShowWelcomeWindow() {
-                self.showWelcomeWindow()
-            }
-
-            // Update last launch date
-            UserDefaults.standard.set(Date(), forKey: "LastLaunchDate")
-
-            // Mark launch as complete to allow normal document opening
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.hasFinishedLaunching = true
-            }
+        // Close any auto-created documents
+        for document in NSDocumentController.shared.documents {
+            document.close()
         }
-    }
 
-    func application(_ sender: NSApplication, openFile filename: String) -> Bool {
-        // Allow opening files when double-clicked
-        return hasFinishedLaunching
+        // Check if we should show welcome window (first launch or 60+ days)
+        if shouldShowWelcomeWindow() {
+            // Open the welcome window
+            NSWorkspace.shared.open(URL(string: "stratify://welcome")!)
+        }
+
+        // Update last launch date
+        UserDefaults.standard.set(Date(), forKey: "LastLaunchDate")
     }
 
     func application(_ application: NSApplication, open urls: [URL]) {
-        // Only process file opens after launch completes
-        guard hasFinishedLaunching else { return }
-
         for url in urls {
+            if url.scheme == "stratify" && url.host == "welcome" {
+                // Welcome window will be shown automatically
+                continue
+            }
             NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, _ in }
         }
+    }
+
+    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
+        // Don't automatically create untitled documents
+        return false
     }
 
     func applicationShouldAutomaticallyLocalizeKeyEquivalents(_ application: NSApplication) -> Bool {
         return true
     }
 
-    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag {
-            showWelcomeWindow()
-        }
-        return true
-    }
-
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool {
-        // Never automatically create untitled documents
-        return false
-    }
-
-    func applicationOpenUntitledFile(_ sender: NSApplication) -> Bool {
-        // Prevent automatic open panel during launch
-        if !hasFinishedLaunching {
-            return false
-        }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        // Don't quit when last window closes
         return false
     }
 
@@ -115,22 +115,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         return daysSinceLastLaunch > 60
     }
 
-    private func showWelcomeWindow() {
-        // Close any existing welcome window
-        welcomeWindowController?.close()
+    func showAboutWindow() {
+        // If window already exists, just bring it to front
+        if let existingWindow = aboutWindowController?.window {
+            existingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
 
-        // Create and show new welcome window
-        let welcomeView = WelcomeWindow()
-        let hostingController = NSHostingController(rootView: welcomeView)
+        // Create and show new about window
+        let aboutView = AboutView()
+        let hostingController = NSHostingController(rootView: aboutView)
 
         let window = NSWindow(contentViewController: hostingController)
-        window.title = "Welcome to Stratify"
+        window.title = "About \(AppInfo.appName)"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
 
-        welcomeWindowController = NSWindowController(window: window)
-        welcomeWindowController?.showWindow(nil)
-        window.center()  // Center after showing to ensure proper positioning
+        aboutWindowController = NSWindowController(window: window)
+        aboutWindowController?.showWindow(nil)
+        window.center()
         window.makeKeyAndOrderFront(nil)
     }
 }

@@ -1,6 +1,6 @@
 //
 //  GameScene.swift
-//  StratifyMiniGame
+//  Stratify
 //
 //  Created by Andrew Benson on 10/27/25.
 //
@@ -26,7 +26,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             scoreLabel?.text = "SCORE: \(score)"
             if score > highScore {
                 highScore = score
-                UserDefaults.standard.set(highScore, forKey: "StratifyHighScore")
+                UserDefaults.standard.set(highScore, forKey: "StratifyMinigameHighScore")
                 highScoreLabel?.text = "HIGH: \(highScore)"
             }
         }
@@ -55,7 +55,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         physicsWorld.contactDelegate = self
         physicsWorld.gravity = CGVector(dx: 0, dy: -9.8)
 
-        highScore = UserDefaults.standard.integer(forKey: "StratifyHighScore")
+        highScore = UserDefaults.standard.integer(forKey: "StratifyMinigameHighScore")
 
         setupWheel()
         setupScoreLabels()
@@ -68,7 +68,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         wheel.position = CGPoint(x: size.width / 2, y: 100)
         addChild(wheel)
 
-        let radius: CGFloat = 120
+        let radius: CGFloat = 150  // Increased by 25% from 120
         let segmentAngle = CGFloat(2 * Double.pi / 5)
 
         for i in 0..<5 {
@@ -118,29 +118,30 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let symbolLabel = SKLabelNode(text: symbol)
         symbolLabel.fontSize = 30
         symbolLabel.fontColor = .white
-        symbolLabel.position = CGPoint(x: symbolX, y: symbolY - 10)
+        symbolLabel.position = CGPoint(x: symbolX, y: symbolY)
         symbolLabel.verticalAlignmentMode = .center
+        symbolLabel.horizontalAlignmentMode = .center
         segmentNode.addChild(symbolLabel)
 
         return segmentNode
     }
 
     private func setupScoreLabels() {
-        scoreLabel = SKLabelNode(fontNamed: "Courier-Bold")
+        scoreLabel = SKLabelNode(fontNamed: "PT Mono")
         scoreLabel?.text = "SCORE: 0"
-        scoreLabel?.fontSize = 24
+        scoreLabel?.fontSize = 43  // Increased by 80% from 24
         scoreLabel?.fontColor = .white
-        scoreLabel?.position = CGPoint(x: 100, y: size.height - 40)
+        scoreLabel?.position = CGPoint(x: 100, y: size.height - 60)
         scoreLabel?.horizontalAlignmentMode = .left
         if let scoreLabel = scoreLabel {
             addChild(scoreLabel)
         }
 
-        highScoreLabel = SKLabelNode(fontNamed: "Courier-Bold")
+        highScoreLabel = SKLabelNode(fontNamed: "PT Mono")
         highScoreLabel?.text = "HIGH: \(highScore)"
-        highScoreLabel?.fontSize = 24
-        highScoreLabel?.fontColor = .gray
-        highScoreLabel?.position = CGPoint(x: size.width - 100, y: size.height - 40)
+        highScoreLabel?.fontSize = 43  // Increased by 80% from 24
+        highScoreLabel?.fontColor = .white  // Changed from .gray
+        highScoreLabel?.position = CGPoint(x: size.width - 100, y: size.height - 60)
         highScoreLabel?.horizontalAlignmentMode = .right
         if let highScoreLabel = highScoreLabel {
             addChild(highScoreLabel)
@@ -170,27 +171,27 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         isGameEnding = false
         let randomColor = colorSymbols.randomElement() ?? colorSymbols[0]
-        let ball = SKShapeNode(circleOfRadius: 20)
+        let ball = SKShapeNode(circleOfRadius: 40)  // Doubled from 20
         ball.fillColor = randomColor.color
         ball.strokeColor = .white
-        ball.lineWidth = 2
+        ball.lineWidth = 3
         ball.position = CGPoint(x: size.width / 2, y: size.height - 50)
         ball.name = "\(randomColor.color)"
 
-        let backgroundCircle = SKShapeNode(circleOfRadius: 12)
+        let backgroundCircle = SKShapeNode(circleOfRadius: 24)  // Doubled from 12
         backgroundCircle.fillColor = .black
         backgroundCircle.strokeColor = .clear
         backgroundCircle.position = .zero
         ball.addChild(backgroundCircle)
 
         let symbolLabel = SKLabelNode(text: randomColor.symbol)
-        symbolLabel.fontSize = 24
+        symbolLabel.fontSize = 48  // Doubled from 24
         symbolLabel.fontColor = .white
-        symbolLabel.position = CGPoint(x: 0, y: -8)
+        symbolLabel.position = CGPoint(x: 0, y: -16)  // Doubled from -8
         symbolLabel.verticalAlignmentMode = .center
         ball.addChild(symbolLabel)
 
-        let physicsBody = SKPhysicsBody(circleOfRadius: 20)
+        let physicsBody = SKPhysicsBody(circleOfRadius: 40)  // Doubled from 20
         physicsBody.categoryBitMask = ballCategory
         physicsBody.contactTestBitMask = wheelCategory
         physicsBody.collisionBitMask = wheelCategory
@@ -335,6 +336,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
             let bounceImpulse = CGVector(dx: normalizedNormal.dx * 300, dy: normalizedNormal.dy * 300)
             ball.physicsBody?.applyImpulse(bounceImpulse)
+
+            // Start 2 second timer for game over
+            let wait = SKAction.wait(forDuration: 1.0)
+            let showGameOver = SKAction.run { [weak self] in
+                self?.showGameOver()
+            }
+            run(SKAction.sequence([wait, showGameOver]))
         }
     }
 
@@ -355,37 +363,89 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
-    private func gameOver() {
+    private func showGameOver() {
         isGameActive = false
-        currentBall?.physicsBody?.affectedByGravity = false
-        currentBall?.physicsBody?.velocity = .zero
+        isGameEnding = false
 
-        let gameOverLabel = SKLabelNode(fontNamed: "PT Mono")
-        gameOverLabel.text = "GAME OVER"
-        gameOverLabel.fontSize = 48
-        gameOverLabel.fontColor = .red
-        gameOverLabel.position = CGPoint(x: size.width / 2, y: size.height / 2)
-        addChild(gameOverLabel)
+        // Check if we have credits to continue
+        var credits = UserDefaults.standard.integer(forKey: "StratifyMinigameCredits")
 
-        let wait = SKAction.wait(forDuration: 2.0)
-        let returnToCredits = SKAction.run { [weak self] in
-            guard let self = self else { return }
-            let creditsScene = CreditsScene(size: self.size)
-            creditsScene.scaleMode = self.scaleMode
-            let transition = SKTransition.fade(withDuration: 0.5)
-            self.view?.presentScene(creditsScene, transition: transition)
+        if credits > 0 {
+            // Decrement credits and continue
+            credits -= 1
+            UserDefaults.standard.set(credits, forKey: "StratifyMinigameCredits")
+
+            // Show game over briefly, then return to credits screen with updated count
+            let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.5)
+            wheel.run(fadeOut)
+            currentBall?.run(fadeOut)
+            leftHandLabel?.run(fadeOut)
+            rightHandLabel?.run(fadeOut)
+            scoreLabel?.run(fadeOut)
+            highScoreLabel?.run(fadeOut)
+
+            let wait = SKAction.wait(forDuration: 0.5)
+            let showLabel = SKAction.run { [weak self] in
+                guard let self = self else { return }
+                let gameOverLabel = SKLabelNode(fontNamed: "PT Mono")
+                gameOverLabel.text = "GAME OVER"
+                gameOverLabel.fontSize = 72
+                gameOverLabel.fontColor = .red
+                gameOverLabel.position = CGPoint(x: self.size.width / 2, y: self.size.height / 2)
+                gameOverLabel.alpha = 0
+                self.addChild(gameOverLabel)
+
+                let fadeIn = SKAction.fadeIn(withDuration: 0.5)
+                gameOverLabel.run(fadeIn)
+            }
+
+            let waitAfterGameOver = SKAction.wait(forDuration: 2.0)
+            let returnToCredits = SKAction.run { [weak self] in
+                guard let self = self else { return }
+                let creditsScene = CreditsScene(size: self.size, mode: .normal)
+                creditsScene.scaleMode = self.scaleMode
+                let transition = SKTransition.fade(withDuration: 0.5)
+                self.view?.presentScene(creditsScene, transition: transition)
+            }
+            run(SKAction.sequence([wait, showLabel, waitAfterGameOver, returnToCredits]))
+        } else {
+            // No credits, go to attract mode
+            let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.5)
+            wheel.run(fadeOut)
+            currentBall?.run(fadeOut)
+            leftHandLabel?.run(fadeOut)
+            rightHandLabel?.run(fadeOut)
+            scoreLabel?.run(fadeOut)
+            highScoreLabel?.run(fadeOut)
+
+            let wait = SKAction.wait(forDuration: 0.5)
+            let showLabel = SKAction.run { [weak self] in
+                guard let self = self else { return }
+                let gameOverLabel = SKLabelNode(fontNamed: "PT Mono")
+                gameOverLabel.text = "GAME OVER"
+                gameOverLabel.fontSize = 72
+                gameOverLabel.fontColor = .red
+                gameOverLabel.position = CGPoint(x: self.size.width / 2, y: self.size.height / 2)
+                gameOverLabel.alpha = 0
+                self.addChild(gameOverLabel)
+
+                let fadeIn = SKAction.fadeIn(withDuration: 0.5)
+                gameOverLabel.run(fadeIn)
+            }
+
+            let waitAfterGameOver = SKAction.wait(forDuration: 6.0)
+            let returnToCredits = SKAction.run { [weak self] in
+                guard let self = self else { return }
+                let creditsScene = CreditsScene(size: self.size, mode: .attract)
+                creditsScene.scaleMode = self.scaleMode
+                let transition = SKTransition.fade(withDuration: 0.5)
+                self.view?.presentScene(creditsScene, transition: transition)
+            }
+            run(SKAction.sequence([wait, showLabel, waitAfterGameOver, returnToCredits]))
         }
-        run(SKAction.sequence([wait, returnToCredits]))
     }
 
     override func update(_ currentTime: TimeInterval) {
-        if isGameEnding, let ball = currentBall {
-            if ball.position.y < -50 || ball.position.x < -50 || ball.position.x > size.width + 50 {
-                isGameEnding = false
-                gameOver()
-            }
-        }
-
         if isBallFallingToHands, !hasCaughtBall, let ball = currentBall {
             let handsY = size.height - 150
             if ball.position.y <= handsY {

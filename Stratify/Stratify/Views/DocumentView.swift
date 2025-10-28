@@ -17,7 +17,7 @@ struct DocumentView: View {
     @State private var selectedLayerIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var showingError = false
-    @State private var imageWindows: [NSWindow] = []
+    @State private var imageWindowObservers: [(window: NSWindow, observer: NSObjectProtocol)] = []
 
     var body: some View {
         HSplitView {
@@ -169,25 +169,32 @@ struct DocumentView: View {
                                 .disabled(selectedLayerIDs.count != 1)
 
                                 Spacer()
-
+                                
                                 // Undo/Redo buttons
-                                Button(action: { undoManager?.undo() }) {
+                                Button(action: { undoManager?.undo() },
+                                       label: {
                                     Image(systemName: "arrow.uturn.backward")
-                                }
+                                })
                                 .disabled(!(undoManager?.canUndo ?? false))
                                 .help("Undo")
-
-                                Button(action: { undoManager?.redo() }) {
+                                
+                                Button(action: { undoManager?.redo() }, label: {
                                     Image(systemName: "arrow.uturn.forward")
-                                }
+                                })
                                 .disabled(!(undoManager?.canRedo ?? false))
                                 .help("Redo")
-
+                                
                                 Button("Export...") {
                                     exportIconBundle()
                                 }
                                 .buttonStyle(.borderedProminent)
                                 .disabled(document.layers.isEmpty)
+
+                                Button("Export for AI Analysis...") {
+                                    exportForAIAnalysis()
+                                }
+                                .buttonStyle(.bordered)
+                                .disabled(document.layers.isEmpty || document.sourceImage == nil)
                             }
                             .padding()
                         }
@@ -293,6 +300,15 @@ struct DocumentView: View {
     }
 
     private func openIconInWindow(_ image: NSImage) {
+        // Check if we already have an "Original Icon" window open
+        if let existing = imageWindowObservers.first(where: { $0.window.title == "Original Icon" && $0.window.isVisible }) {
+            existing.window.makeKeyAndOrderFront(nil)
+            return
+        }
+
+        // Create independent copy to prevent reference issues
+        guard let imageCopy = image.copy() as? NSImage else { return }
+
         let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 512, height: 512),
             styleMask: [.titled, .closable, .resizable],
@@ -300,8 +316,9 @@ struct DocumentView: View {
             defer: false
         )
         window.title = "Original Icon"
+        window.animationBehavior = .none  // Disable close animation to prevent crash
         window.contentView = NSHostingView(rootView:
-            Image(nsImage: image)
+            Image(nsImage: imageCopy)
                 .resizable()
                 .aspectRatio(contentMode: .fit)
                 .background(CheckerboardBackground())
@@ -309,20 +326,27 @@ struct DocumentView: View {
         window.center()
         window.makeKeyAndOrderFront(nil)
 
-        // Retain the window and set up cleanup on close
-        imageWindows.append(window)
-
-        // Remove window from array when it closes
-        NotificationCenter.default.addObserver(
+        // Set up cleanup on close
+        let observer = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
             object: window,
             queue: .main,
             using: { [weak window] _ in
-                if let window = window {
-                    self.imageWindows.removeAll { $0 == window }
+                print("🔍 Window close notification received")
+
+                guard let window = window else {
+                    print("⚠️ Window was deallocated")
+                    return
                 }
+
+                print("📊 Removing window and observer from array (current count: \(self.imageWindowObservers.count))")
+                self.imageWindowObservers.removeAll { $0.window == window }
+                print("✅ Window and observer removed (new count: \(self.imageWindowObservers.count))")
             }
         )
+
+        // Retain the window and observer together
+        imageWindowObservers.append((window: window, observer: observer))
     }
 
     @MainActor
@@ -532,6 +556,35 @@ struct DocumentView: View {
                 alert.addButton(withTitle: "OK")
                 alert.runModal()
             }
+        }
+    }
+
+    private func exportForAIAnalysis() {
+        guard let sourceImage = document.sourceImage else {
+            return
+        }
+
+        let success = AIAnalysisExporter.exportForAIAnalysis(
+            sourceImage: sourceImage,
+            layers: document.layers
+        )
+
+        if success {
+            // Show success notification
+            let alert = NSAlert()
+            alert.messageText = "AI Analysis Export Successful"
+            alert.informativeText = "Diagnostic image saved successfully"
+            alert.alertStyle = .informational
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        } else {
+            // Show error alert
+            let alert = NSAlert()
+            alert.messageText = "Export Failed"
+            alert.informativeText = "Failed to create AI analysis export"
+            alert.alertStyle = .critical
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
         }
     }
 

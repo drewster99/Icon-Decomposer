@@ -25,11 +25,9 @@ struct Layer: Identifiable, Codable, Sendable {
 
     /// Computed property for display - creates NSImage for SwiftUI
     nonisolated var image: NSImage? {
-        get {
-            guard let cgImage = CGImage.create(from: imageData) else { return nil }
-            // Create NSImage with explicit size to avoid Retina confusion
-            return NSImage(cgImage: cgImage, size: NSSize(width: pixelWidth, height: pixelHeight))
-        }
+        guard let cgImage = CGImage.create(from: imageData) else { return nil }
+        // Create NSImage with explicit size to avoid Retina confusion
+        return NSImage(cgImage: cgImage, size: NSSize(width: pixelWidth, height: pixelHeight))
     }
 
     /// Direct access to CGImage for operations (no NSImage overhead)

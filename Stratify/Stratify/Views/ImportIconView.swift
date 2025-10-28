@@ -81,6 +81,11 @@ struct ImportIconView: View {
         for provider in providers {
             if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.image.identifier, options: nil) { item, error in
+                    if let error = error {
+                        print("⚠️ Failed to load image from drop: \(error.localizedDescription)")
+                        return
+                    }
+
                     if let data = item as? Data, let image = NSImage(data: data) {
                         DispatchQueue.main.async {
                             onImport(image)
@@ -96,6 +101,11 @@ struct ImportIconView: View {
 
             if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
                 provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+                    if let error = error {
+                        print("⚠️ Failed to load file URL from drop: \(error.localizedDescription)")
+                        return
+                    }
+
                     if let data = item as? Data,
                        let url = URL(dataRepresentation: data, relativeTo: nil),
                        let image = NSImage(contentsOf: url) {

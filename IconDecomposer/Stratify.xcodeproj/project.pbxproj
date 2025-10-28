@@ -15,6 +15,7 @@
 		494495862E8A08D10061A59E /* Stratify.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Stratify.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		494495982E8A08F80061A59E /* SLIC_ProofOfConcept.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SLIC_ProofOfConcept.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		494EDE442E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SLIC_POC_MetalKMeans.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4950B53F2EB0152A005CAC82 /* StratifyMiniGame.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StratifyMiniGame.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -46,6 +47,11 @@
 			path = SLIC_POC_MetalKMeans;
 			sourceTree = "<group>";
 		};
+		4950B5402EB0152A005CAC82 /* StratifyMiniGame */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = StratifyMiniGame;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -72,6 +78,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4950B53C2EB0152A005CAC82 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -81,6 +94,7 @@
 				494495882E8A08D10061A59E /* Stratify */,
 				494495992E8A08F80061A59E /* SLIC_ProofOfConcept */,
 				494EDE452E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans */,
+				4950B5402EB0152A005CAC82 /* StratifyMiniGame */,
 				494495872E8A08D10061A59E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -91,6 +105,7 @@
 				494495862E8A08D10061A59E /* Stratify.app */,
 				494495982E8A08F80061A59E /* SLIC_ProofOfConcept.app */,
 				494EDE442E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans.app */,
+				4950B53F2EB0152A005CAC82 /* StratifyMiniGame.app */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -166,6 +181,28 @@
 			productReference = 494EDE442E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans.app */;
 			productType = "com.apple.product-type.application";
 		};
+		4950B53E2EB0152A005CAC82 /* StratifyMiniGame */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 4950B5502EB0152B005CAC82 /* Build configuration list for PBXNativeTarget "StratifyMiniGame" */;
+			buildPhases = (
+				4950B53B2EB0152A005CAC82 /* Sources */,
+				4950B53C2EB0152A005CAC82 /* Frameworks */,
+				4950B53D2EB0152A005CAC82 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				4950B5402EB0152A005CAC82 /* StratifyMiniGame */,
+			);
+			name = StratifyMiniGame;
+			packageProductDependencies = (
+			);
+			productName = StratifyMiniGame;
+			productReference = 4950B53F2EB0152A005CAC82 /* StratifyMiniGame.app */;
+			productType = "com.apple.product-type.application";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -183,6 +220,9 @@
 						CreatedOnToolsVersion = 26.0;
 					};
 					494EDE432E8D8D0E00BD48FF = {
+						CreatedOnToolsVersion = 26.0.1;
+					};
+					4950B53E2EB0152A005CAC82 = {
 						CreatedOnToolsVersion = 26.0.1;
 					};
 				};
@@ -208,6 +248,7 @@
 				494495852E8A08D10061A59E /* Stratify */,
 				494495972E8A08F80061A59E /* SLIC_ProofOfConcept */,
 				494EDE432E8D8D0E00BD48FF /* SLIC_POC_MetalKMeans */,
+				4950B53E2EB0152A005CAC82 /* StratifyMiniGame */,
 			);
 		};
 /* End PBXProject section */
@@ -234,6 +275,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		4950B53D2EB0152A005CAC82 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -252,6 +300,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		494EDE402E8D8D0E00BD48FF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4950B53B2EB0152A005CAC82 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -605,6 +660,74 @@
 			};
 			name = Release;
 		};
+		4950B5512EB0152B005CAC82 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P8MA38JTXY;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nuclearcyborg.Stratify.StratifyMiniGame;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4950B5522EB0152B005CAC82 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = P8MA38JTXY;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainStoryboardFile = Main;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nuclearcyborg.Stratify.StratifyMiniGame;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -640,6 +763,15 @@
 			buildConfigurations = (
 				494EDE4D2E8D8D0F00BD48FF /* Debug */,
 				494EDE4E2E8D8D0F00BD48FF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		4950B5502EB0152B005CAC82 /* Build configuration list for PBXNativeTarget "StratifyMiniGame" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4950B5512EB0152B005CAC82 /* Debug */,
+				4950B5522EB0152B005CAC82 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

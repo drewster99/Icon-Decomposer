@@ -61,18 +61,21 @@ class ProcessingCoordinator {
                 continue
             }
 
-            // Create NSImage from Metal buffer
-            guard let layerImage = createLayerImage(from: layerBuffer, width: width, height: height) else {
+            // Create CGImage from Metal buffer
+            guard let layerCGImage = createLayerCGImage(from: layerBuffer, width: width, height: height) else {
                 print("Warning: Failed to create image from layer_\(i) buffer")
                 continue
             }
+
+            // Diagnostic: Log layer dimensions and bit depth
+            print("📐 Created layer \(i): \(layerCGImage.width)×\(layerCGImage.height)px, \(layerCGImage.bitsPerComponent)-bit")
 
             // Calculate pixel count and average color
             let (pixelCount, avgColor) = analyzeLayer(layerBuffer, width: width, height: height)
 
             let layer = Layer(
                 name: "Layer \(i + 1)",
-                image: layerImage,
+                cgImage: layerCGImage,
                 pixelCount: pixelCount,
                 averageColor: avgColor,
                 isSelected: true
@@ -94,8 +97,8 @@ class ProcessingCoordinator {
         return layers
     }
 
-    /// Create NSImage from Metal buffer containing BGRA8 data
-    static func createLayerImage(from buffer: MTLBuffer, width: Int, height: Int) -> NSImage? {
+    /// Create CGImage from Metal buffer containing BGRA8 data
+    static func createLayerCGImage(from buffer: MTLBuffer, width: Int, height: Int) -> CGImage? {
         let bytesPerPixel = 4
         let bytesPerRow = width * bytesPerPixel
         let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
@@ -112,11 +115,7 @@ class ProcessingCoordinator {
             return nil
         }
 
-        guard let cgImage = context.makeImage() else {
-            return nil
-        }
-
-        return NSImage(cgImage: cgImage, size: NSSize(width: width, height: height))
+        return context.makeImage()
     }
 
     /// Analyze layer to get pixel count and average LAB color

@@ -169,24 +169,44 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
     /// Combine two layers
     func combineLayers(source: Layer, target: Layer, actionName: String = "Combine Layers") {
-        guard let sourceImage = source.image,
-              let targetImage = target.image else { return }
-
         let oldLayers = self.layers
 
-        // Combine the two images by compositing
-        let size = sourceImage.size
-        let combinedImage = NSImage(size: size)
+        // Combine the two images by compositing at exact pixel dimensions using Core Graphics
+        guard let cgTarget = target.cgImage,
+              let cgSource = source.cgImage else { return }
 
-        combinedImage.lockFocus()
-        targetImage.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-        sourceImage.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-        combinedImage.unlockFocus()
+        let width = cgTarget.width
+        let height = cgTarget.height
 
-        // Create combined layer
+        // Create CGContext for compositing
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        ) else { return }
+
+        // Draw both images
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+        context.draw(cgTarget, in: rect)
+        context.draw(cgSource, in: rect)
+
+        // Get the combined CGImage
+        guard let combinedCGImage = context.makeImage() else { return }
+
+        // Convert to PNG data for storage
+        let bitmapRep = NSBitmapImageRep(cgImage: combinedCGImage)
+        guard let pngData = bitmapRep.representation(using: .png, properties: [:]) else { return }
+
+        // Create combined layer using new imageData-based initializer
         let combinedLayer = Layer(
             name: target.name,
-            image: combinedImage,
+            imageData: pngData,
+            pixelWidth: width,
+            pixelHeight: height,
             pixelCount: source.pixelCount + target.pixelCount,
             averageColor: target.averageColor,
             isSelected: true
@@ -214,31 +234,48 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
         let oldLayers = self.layers
 
-        // Combine all selected layers into the first one
-        var combinedImage = firstLayer.image
+        // Start with first layer's CGImage
+        guard var currentCGImage = firstLayer.cgImage else { return }
         var totalPixelCount = firstLayer.pixelCount
 
+        let width = currentCGImage.width
+        let height = currentCGImage.height
+        let rect = CGRect(x: 0, y: 0, width: width, height: height)
+
+        // Combine all selected layers using Core Graphics
         for layer in selectedLayers.dropFirst() {
-            guard let layerImage = layer.image,
-                  let combined = combinedImage else { continue }
+            guard let layerCGImage = layer.cgImage else { continue }
 
-            let size = combined.size
-            let newCombined = NSImage(size: size)
+            // Create CGContext for compositing
+            guard let context = CGContext(
+                data: nil,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: width * 4,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+            ) else { continue }
 
-            newCombined.lockFocus()
-            combined.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-            layerImage.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-            newCombined.unlockFocus()
+            // Draw current combined image and new layer
+            context.draw(currentCGImage, in: rect)
+            context.draw(layerCGImage, in: rect)
 
-            combinedImage = newCombined
+            // Get the new combined CGImage
+            guard let newCombined = context.makeImage() else { continue }
+            currentCGImage = newCombined
             totalPixelCount += layer.pixelCount
         }
 
-        guard let finalImage = combinedImage else { return }
+        // Convert final CGImage to PNG data for storage
+        let bitmapRep = NSBitmapImageRep(cgImage: currentCGImage)
+        guard let pngData = bitmapRep.representation(using: .png, properties: [:]) else { return }
 
         let combinedLayer = Layer(
             name: firstLayer.name,
-            image: finalImage,
+            imageData: pngData,
+            pixelWidth: width,
+            pixelHeight: height,
             pixelCount: totalPixelCount,
             averageColor: firstLayer.averageColor,
             isSelected: true
@@ -420,7 +457,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
                 var layers: [Layer] = []
 
                 for (i, layerBuffer) in layerBuffers.enumerated() {
-                    guard let layerImage = ProcessingCoordinator.createLayerImage(from: layerBuffer, width: width, height: height) else {
+                    guard let layerCGImage = ProcessingCoordinator.createLayerCGImage(from: layerBuffer, width: width, height: height) else {
                         continue
                     }
 
@@ -431,7 +468,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
                     layers.append(Layer(
                         name: "\(layer.name) - Part \(i + 1)",
-                        image: layerImage,
+                        cgImage: layerCGImage,
                         pixelCount: pixelCount,
                         averageColor: avgColor,
                         isSelected: false

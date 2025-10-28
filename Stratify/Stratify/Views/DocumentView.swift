@@ -391,22 +391,42 @@ struct DocumentView: View {
                 let layer1 = layersToMerge[i]
                 let layer2 = layersToMerge[j]
 
-                // Combine the images
-                guard let image1 = layer1.image,
-                      let image2 = layer2.image else { continue }
+                // Combine the images at exact pixel dimensions using Core Graphics
+                guard let cgImage1 = layer1.cgImage,
+                      let cgImage2 = layer2.cgImage else { continue }
 
-                let size = image1.size
-                let combinedImage = NSImage(size: size)
+                let width = cgImage1.width
+                let height = cgImage1.height
 
-                combinedImage.lockFocus()
-                image1.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-                image2.draw(at: .zero, from: NSRect(origin: .zero, size: size), operation: .sourceOver, fraction: 1.0)
-                combinedImage.unlockFocus()
+                // Create CGContext for compositing
+                guard let context = CGContext(
+                    data: nil,
+                    width: width,
+                    height: height,
+                    bitsPerComponent: 8,
+                    bytesPerRow: width * 4,
+                    space: CGColorSpaceCreateDeviceRGB(),
+                    bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+                ) else { continue }
+
+                // Draw both images
+                let rect = CGRect(x: 0, y: 0, width: width, height: height)
+                context.draw(cgImage1, in: rect)
+                context.draw(cgImage2, in: rect)
+
+                // Get the combined CGImage
+                guard let combinedCGImage = context.makeImage() else { continue }
+
+                // Convert to PNG data for storage
+                let bitmapRep = NSBitmapImageRep(cgImage: combinedCGImage)
+                guard let pngData = bitmapRep.representation(using: .png, properties: [:]) else { continue }
 
                 // Create merged layer (keep first layer's name, combine pixel counts)
                 let mergedLayer = Layer(
                     name: layer1.name,
-                    image: combinedImage,
+                    imageData: pngData,
+                    pixelWidth: width,
+                    pixelHeight: height,
                     pixelCount: layer1.pixelCount + layer2.pixelCount,
                     averageColor: layer1.averageColor,  // Use larger layer's color
                     isSelected: false
@@ -470,9 +490,48 @@ struct DocumentView: View {
         panel.allowedContentTypes = [.folder]
         panel.nameFieldStringValue = "Icon.icon"
         panel.message = "Choose where to save the .icon bundle"
+        panel.canCreateDirectories = true
 
-        if panel.runModal() == .OK, let _ = panel.url {
-            // TODO: Export .icon bundle
+        if panel.runModal() == .OK, let bundleURL = panel.url {
+            guard let sourceImage = document.sourceImage else { return }
+
+            do {
+                // Use layer groups if available, otherwise export individual layers
+                if !document.layerGroups.isEmpty {
+                    try IconBundleExporter.exportIconBundleWithGroups(
+                        layerGroups: document.layerGroups,
+                        sourceImage: sourceImage,
+                        to: bundleURL
+                    )
+                } else {
+                    try IconBundleExporter.exportIconBundle(
+                        layers: document.layers,
+                        sourceImage: sourceImage,
+                        to: bundleURL
+                    )
+                }
+
+                // Show success notification
+                let alert = NSAlert()
+                alert.messageText = "Export Successful"
+                alert.informativeText = "Icon bundle saved to:\n\(bundleURL.path)"
+                alert.alertStyle = .informational
+                alert.addButton(withTitle: "OK")
+                alert.addButton(withTitle: "Show in Finder")
+
+                let response = alert.runModal()
+                if response == .alertSecondButtonReturn {
+                    NSWorkspace.shared.activateFileViewerSelecting([bundleURL])
+                }
+            } catch {
+                // Show error alert
+                let alert = NSAlert()
+                alert.messageText = "Export Failed"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .critical
+                alert.addButton(withTitle: "OK")
+                alert.runModal()
+            }
         }
     }
 
@@ -480,10 +539,13 @@ struct DocumentView: View {
 
     private func createDummyLayers(from image: NSImage) -> [Layer] {
         // Temporary placeholder until we integrate processing
+        guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return []
+        }
         return [
-            Layer(name: "Layer 1", image: image, pixelCount: 1000000, averageColor: SIMD3<Float>(50, 0, 0)),
-            Layer(name: "Layer 2", image: image, pixelCount: 500000, averageColor: SIMD3<Float>(70, 10, -10)),
-            Layer(name: "Layer 3", image: image, pixelCount: 250000, averageColor: SIMD3<Float>(30, -5, 15))
+            Layer(name: "Layer 1", cgImage: cgImage, pixelCount: 1000000, averageColor: SIMD3<Float>(50, 0, 0)),
+            Layer(name: "Layer 2", cgImage: cgImage, pixelCount: 500000, averageColor: SIMD3<Float>(70, 10, -10)),
+            Layer(name: "Layer 3", cgImage: cgImage, pixelCount: 250000, averageColor: SIMD3<Float>(30, -5, 15))
         ]
     }
 }

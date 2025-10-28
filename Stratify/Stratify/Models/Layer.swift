@@ -19,24 +19,27 @@ struct Layer: Identifiable, Codable, Sendable {
     /// Image data stored as PNG
     private var imageData: Data
 
-    /// Computed property for the actual image
+    /// Explicit pixel dimensions (not points)
+    private var pixelWidth: Int
+    private var pixelHeight: Int
+
+    /// Computed property for display - creates NSImage for SwiftUI
     nonisolated var image: NSImage? {
         get {
-            return NSImage(data: imageData)
+            guard let cgImage = CGImage.create(from: imageData) else { return nil }
+            // Create NSImage with explicit size to avoid Retina confusion
+            return NSImage(cgImage: cgImage, size: NSSize(width: pixelWidth, height: pixelHeight))
         }
-        set {
-            if let newImage = newValue,
-               let tiffData = newImage.tiffRepresentation,
-               let bitmapImage = NSBitmapImageRep(data: tiffData),
-               let pngData = bitmapImage.representation(using: .png, properties: [:]) {
-                imageData = pngData
-            }
-        }
+    }
+
+    /// Direct access to CGImage for operations (no NSImage overhead)
+    nonisolated var cgImage: CGImage? {
+        return CGImage.create(from: imageData)
     }
 
     init(id: UUID = UUID(),
          name: String,
-         image: NSImage,
+         cgImage: CGImage,
          pixelCount: Int,
          averageColor: SIMD3<Float>,
          isSelected: Bool = true) {
@@ -46,19 +49,77 @@ struct Layer: Identifiable, Codable, Sendable {
         self.averageColor = averageColor
         self.isSelected = isSelected
 
-        // Convert image to PNG data
-        if let tiffData = image.tiffRepresentation,
-           let bitmapImage = NSBitmapImageRep(data: tiffData),
-           let pngData = bitmapImage.representation(using: .png, properties: [:]) {
+        // Store explicit pixel dimensions from CGImage
+        self.pixelWidth = cgImage.width
+        self.pixelHeight = cgImage.height
+
+        // Convert CGImage directly to PNG data (no TIFF intermediate)
+        let bitmapRep = NSBitmapImageRep(cgImage: cgImage)
+        if let pngData = bitmapRep.representation(using: .png, properties: [:]) {
             self.imageData = pngData
+
+            // Diagnostic: Verify what was stored
+            print("💾 Stored layer '\(name)': \(self.pixelWidth)×\(self.pixelHeight)px, \(cgImage.bitsPerComponent)-bit")
         } else {
             self.imageData = Data()
+            print("⚠️ Layer '\(name)': Failed to encode image data")
         }
+    }
+
+    // Convenience init for creating merged/combined layers from existing image data
+    init(id: UUID = UUID(),
+         name: String,
+         imageData: Data,
+         pixelWidth: Int,
+         pixelHeight: Int,
+         pixelCount: Int,
+         averageColor: SIMD3<Float>,
+         isSelected: Bool = true) {
+        self.id = id
+        self.name = name
+        self.imageData = imageData
+        self.pixelWidth = pixelWidth
+        self.pixelHeight = pixelHeight
+        self.pixelCount = pixelCount
+        self.averageColor = averageColor
+        self.isSelected = isSelected
     }
 
     // Make Layer mutable for renaming
     mutating func rename(_ newName: String) {
         self.name = newName
+    }
+}
+
+// MARK: - CGImage Extension
+extension CGImage {
+    /// Create CGImage from PNG/JPEG data
+    nonisolated static func create(from data: Data) -> CGImage? {
+        guard let dataProvider = CGDataProvider(data: data as CFData) else {
+            return nil
+        }
+
+        // Try PNG first
+        if let cgImage = CGImage(
+            pngDataProviderSource: dataProvider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        ) {
+            return cgImage
+        }
+
+        // Try JPEG if PNG fails
+        if let cgImage = CGImage(
+            jpegDataProviderSource: dataProvider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        ) {
+            return cgImage
+        }
+
+        return nil
     }
 }
 

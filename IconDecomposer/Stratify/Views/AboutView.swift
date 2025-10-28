@@ -36,12 +36,7 @@ struct AboutView: View {
             .padding(.top, 20)
 
             // Mini Game (scaled down to 0.25x = 200x150 from 800x600)
-            VStack(spacing: 6) {
-                Text("Color Spinner")
-                    .font(.caption)
-                    .fontWeight(.medium)
-                    .foregroundColor(.secondary)
-
+            ZStack(alignment: .top) {
                 MiniGameView()
                     .frame(maxWidth: .infinity)
                     .aspectRatio(200.0/150.0, contentMode: .fit)
@@ -51,8 +46,37 @@ struct AboutView: View {
                         RoundedRectangle(cornerRadius: 6)
                             .stroke(Color.gray.opacity(0.3), lineWidth: 1)
                     )
+
+                Text("MINIGAME")
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 2)
+                    .background(Color(NSColor.windowBackgroundColor))
+                    .offset(y: -4)
             }
             .padding(.vertical, 8)
+
+            // Review request
+            VStack(spacing: 2) {
+                HStack(spacing: 4) {
+                    Text("Please consider")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+
+                    Link("reviewing this app", destination: AppInfo.appStoreRequestReviewURL)
+                        .font(.caption2)
+
+                    Text("on the App Store.")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+
+                Text("We really appreciate it.")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal, 20)
 
             // Copyright
             Text("Copyright © 2025 Nuclear Cyborg Corp.")

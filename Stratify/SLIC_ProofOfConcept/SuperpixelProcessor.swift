@@ -79,9 +79,15 @@ class SuperpixelProcessor {
                 let label = labelsPointer[idx]
                 let labColor = labPointer[idx]
 
-                colorAccumulators[label]! += labColor
-                positionAccumulators[label]! += SIMD2<Float>(Float(x), Float(y))
-                pixelCounts[label]! += 1
+                guard let currentColor = colorAccumulators[label],
+                      let currentPosition = positionAccumulators[label],
+                      let currentCount = pixelCounts[label] else {
+                    continue
+                }
+
+                colorAccumulators[label] = currentColor + labColor
+                positionAccumulators[label] = currentPosition + SIMD2<Float>(Float(x), Float(y))
+                pixelCounts[label] = currentCount + 1
             }
         }
 
@@ -89,11 +95,15 @@ class SuperpixelProcessor {
         var superpixels: [Superpixel] = []
 
         for label in uniqueLabels.sorted() {
-            let count = pixelCounts[label]!
-            guard count > 0 else { continue }
+            guard let count = pixelCounts[label],
+                  let avgColorAccumulated = colorAccumulators[label],
+                  let avgPositionAccumulated = positionAccumulators[label] else {
+                continue
+            }
 
-            let avgColor = colorAccumulators[label]! / Float(count)
-            let avgPosition = positionAccumulators[label]! / Float(count)
+            // Note: count is guaranteed to be > 0 since label came from uniqueLabels (derived from labelMap)
+            let avgColor = avgColorAccumulated / Float(count)
+            let avgPosition = avgPositionAccumulated / Float(count)
 
             let superpixel = Superpixel(
                 id: Int(label),

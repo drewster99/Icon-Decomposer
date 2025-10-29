@@ -180,11 +180,9 @@ class KMeansProcessor {
         var colorSums = Array(repeating: SIMD3<Float>(0, 0, 0), count: numClusters)
         var counts = Array(repeating: 0, count: numClusters)
 
-        for (index, clusterId) in clusterAssignments.enumerated() {
-            if clusterId >= 0 {
-                colorSums[clusterId] += originalColors[index]
-                counts[clusterId] += 1
-            }
+        for (index, clusterId) in clusterAssignments.enumerated() where clusterId >= 0 {
+            colorSums[clusterId] += originalColors[index]
+            counts[clusterId] += 1
         }
 
         // Calculate averages
@@ -287,7 +285,7 @@ class KMeansProcessor {
 
 // Extension for string repetition (used for logging)
 extension String {
-    static func *(left: String, right: Int) -> String {
+    static func * (left: String, right: Int) -> String {
         return String(repeating: left, count: right)
     }
 }

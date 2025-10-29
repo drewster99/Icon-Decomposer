@@ -12,7 +12,7 @@ struct CheckerboardBackground: View {
     let squareSize: CGFloat = 10
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             Canvas { context, size in
                 let rows = Int(ceil(size.height / squareSize))
                 let columns = Int(ceil(size.width / squareSize))
@@ -312,17 +312,20 @@ struct ContentView: View {
         image.lockFocus()
 
         // Create different patterns for each test image
-        let context = NSGraphicsContext.current!.cgContext
+        guard let currentContext = NSGraphicsContext.current else {
+            image.unlockFocus()
+            return image
+        }
+        let context = currentContext.cgContext
 
-            let colors = [NSColor.purple, NSColor.magenta]
-            for y in stride(from: 0, to: 1024, by: 128) {
-                for x in stride(from: 0, to: 1024, by: 128) {
-                    let colorIndex = ((x / 128) + (y / 128)) % 2
-                    context.setFillColor(colors[colorIndex].cgColor)
-                    context.fill(CGRect(x: x, y: y, width: 128, height: 128))
-                }
+        let colors = [NSColor.purple, NSColor.magenta]
+        for y in stride(from: 0, to: 1024, by: 128) {
+            for x in stride(from: 0, to: 1024, by: 128) {
+                let colorIndex = ((x / 128) + (y / 128)) % 2
+                context.setFillColor(colors[colorIndex].cgColor)
+                context.fill(CGRect(x: x, y: y, width: 128, height: 128))
             }
-
+        }
 
         image.unlockFocus()
         return image

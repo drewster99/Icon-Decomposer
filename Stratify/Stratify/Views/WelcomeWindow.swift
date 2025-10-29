@@ -9,6 +9,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct WelcomeWindow: View {
+    private static let fontFamily = "Didot"
     var onGetStarted: () -> Void
 
     var body: some View {
@@ -16,10 +17,10 @@ struct WelcomeWindow: View {
             // Header
             VStack(spacing: 12) {
                 Text("Welcome to Stratify")
-                    .font(.custom(AppInfo.fontFamily, size: 36, relativeTo: .largeTitle))
+                    .font(.custom(Self.fontFamily, size: 36, relativeTo: .largeTitle))
 
                 Text("Easily convert your single-image icons to Icon Composer layers")
-                    .font(.custom(AppInfo.fontFamily, size: 20, relativeTo: .title3))
+                    .font(.custom(Self.fontFamily, size: 20, relativeTo: .title3))
                     .foregroundColor(.secondary)
             }
             .padding(.top, 50)

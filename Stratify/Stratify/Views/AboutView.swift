@@ -25,11 +25,11 @@ struct AboutView: View {
                         .foregroundColor(.blue)
                 }
 
-                Text(AppInfo.appName)
+                Text(AppConfig.appName)
                     .font(.title)
                     .fontWeight(.bold)
 
-                Text("Version \(AppInfo.appVersionString)")
+                Text("Version \(AppConfig.appVersion)")
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
@@ -64,7 +64,7 @@ struct AboutView: View {
                         .font(.caption2)
                         .foregroundColor(.secondary)
 
-                    Link("reviewing this app", destination: AppInfo.appStoreRequestReviewURL)
+                    Link("reviewing this app", destination: AppConfig.appStoreReviewURL)
                         .font(.caption2)
 
                     Text("on the App Store.")
@@ -86,19 +86,19 @@ struct AboutView: View {
 
             // Links
             HStack(spacing: 16) {
-                Link("Website", destination: AppInfo.websiteURL)
+                Link("Website", destination: AppConfig.websiteURL)
                     .font(.caption)
 
                 Text("•")
                     .foregroundColor(.secondary)
 
-                Link("Privacy Policy", destination: AppInfo.privacyPolicyURL)
+                Link("Privacy Policy", destination: AppConfig.privacyURL)
                     .font(.caption)
 
                 Text("•")
                     .foregroundColor(.secondary)
 
-                Link("Terms of Use", destination: AppInfo.termsOfUseURL)
+                Link("Terms of Use", destination: AppConfig.termsURL)
                     .font(.caption)
             }
             .padding(.bottom, 20)

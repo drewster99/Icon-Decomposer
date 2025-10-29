@@ -11,7 +11,7 @@ import AppKit
 class GameScene: SKScene, SKPhysicsContactDelegate {
 
     // Game elements
-    private var wheel: SKNode!
+    private var wheel: SKNode?
     private var wheelSegments: [(color: NSColor, symbol: String)] = []
     private var currentBall: SKShapeNode?
     private var leftHandLabel: SKLabelNode?
@@ -64,9 +64,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
 
     private func setupWheel() {
-        wheel = SKNode()
-        wheel.position = CGPoint(x: size.width / 2, y: 100)
-        addChild(wheel)
+        let wheelNode = SKNode()
+        wheelNode.position = CGPoint(x: size.width / 2, y: 100)
+        addChild(wheelNode)
+        wheel = wheelNode
 
         let radius: CGFloat = 150  // Increased by 25% from 120
         let segmentAngle = CGFloat(2 * Double.pi / 5)
@@ -79,14 +80,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 color: colorSymbols[i].color,
                 symbol: colorSymbols[i].symbol
             )
-            wheel.addChild(segment)
+            wheelNode.addChild(segment)
         }
 
         let physicsBody = SKPhysicsBody(circleOfRadius: radius)
         physicsBody.isDynamic = false
         physicsBody.categoryBitMask = wheelCategory
         physicsBody.contactTestBitMask = ballCategory
-        wheel.physicsBody = physicsBody
+        wheelNode.physicsBody = physicsBody
     }
 
     private func createWheelSegment(radius: CGFloat, startAngle: CGFloat, endAngle: CGFloat, color: NSColor, symbol: String) -> SKNode {
@@ -254,7 +255,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let radians = degrees * CGFloat.pi / 180
         currentRotation += radians
         let rotateAction = SKAction.rotate(byAngle: radians, duration: 0.1)
-        wheel.run(rotateAction)
+        wheel?.run(rotateAction)
     }
 
     override func keyDown(with event: NSEvent) {
@@ -303,9 +304,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         guard let ball = ballBody?.node as? SKShapeNode else { return }
         guard let ballColorString = ball.name else { return }
+        guard let wheelPosition = wheel?.position else { return }
 
         let contactPoint = contact.contactPoint
-        let wheelPosition = wheel.position
         let relativePoint = CGPoint(x: contactPoint.x - wheelPosition.x, y: contactPoint.y - wheelPosition.y)
 
         var angle = atan2(relativePoint.y, relativePoint.x)
@@ -377,7 +378,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
             // Show game over briefly, then return to credits screen with updated count
             let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.5)
-            wheel.run(fadeOut)
+            wheel?.run(fadeOut)
             currentBall?.run(fadeOut)
             leftHandLabel?.run(fadeOut)
             rightHandLabel?.run(fadeOut)
@@ -411,7 +412,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         } else {
             // No credits, go to attract mode
             let fadeOut = SKAction.fadeAlpha(to: 0.0, duration: 0.5)
-            wheel.run(fadeOut)
+            wheel?.run(fadeOut)
             currentBall?.run(fadeOut)
             leftHandLabel?.run(fadeOut)
             rightHandLabel?.run(fadeOut)

@@ -8,6 +8,16 @@
 
 /* Begin PBXBuildFile section */
 		494EDE3D2E8CE8B900BD48FF /* SwiftKMeansPlusPlus in Frameworks */ = {isa = PBXBuildFile; productRef = 494EDE3C2E8CE8B900BD48FF /* SwiftKMeansPlusPlus */; };
+		4996F8E42EB1C76F00C8AD74 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8E32EB1C76F00C8AD74 /* FirebaseAnalytics */; };
+		4996F8E62EB1C76F00C8AD74 /* FirebaseAnalyticsCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8E52EB1C76F00C8AD74 /* FirebaseAnalyticsCore */; };
+		4996F8E82EB1C76F00C8AD74 /* FirebaseAppCheck in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8E72EB1C76F00C8AD74 /* FirebaseAppCheck */; };
+		4996F8EA2EB1C76F00C8AD74 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8E92EB1C76F00C8AD74 /* FirebaseAuth */; };
+		4996F8EC2EB1C76F00C8AD74 /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8EB2EB1C76F00C8AD74 /* FirebaseCore */; };
+		4996F8EE2EB1C76F00C8AD74 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8ED2EB1C76F00C8AD74 /* FirebaseCrashlytics */; };
+		4996F8F02EB1C76F00C8AD74 /* FirebaseFunctions in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8EF2EB1C76F00C8AD74 /* FirebaseFunctions */; };
+		4996F8F32EB1C79600C8AD74 /* NCCOpenAppleSearchAdsInstallAttribution in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8F22EB1C79600C8AD74 /* NCCOpenAppleSearchAdsInstallAttribution */; };
+		4996F8F62EB1C7E100C8AD74 /* RevenueCat in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8F52EB1C7E100C8AD74 /* RevenueCat */; };
+		4996F8F82EB1C7E100C8AD74 /* RevenueCatUI in Frameworks */ = {isa = PBXBuildFile; productRef = 4996F8F72EB1C7E100C8AD74 /* RevenueCatUI */; };
 		49AB384E2EAEE31C00B40BB2 /* ImageColorSegmentation in Frameworks */ = {isa = PBXBuildFile; productRef = 49AB384D2EAEE31C00B40BB2 /* ImageColorSegmentation */; };
 /* End PBXBuildFile section */
 
@@ -59,6 +69,16 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4996F8E82EB1C76F00C8AD74 /* FirebaseAppCheck in Frameworks */,
+				4996F8EA2EB1C76F00C8AD74 /* FirebaseAuth in Frameworks */,
+				4996F8F62EB1C7E100C8AD74 /* RevenueCat in Frameworks */,
+				4996F8F82EB1C7E100C8AD74 /* RevenueCatUI in Frameworks */,
+				4996F8E42EB1C76F00C8AD74 /* FirebaseAnalytics in Frameworks */,
+				4996F8F02EB1C76F00C8AD74 /* FirebaseFunctions in Frameworks */,
+				4996F8F32EB1C79600C8AD74 /* NCCOpenAppleSearchAdsInstallAttribution in Frameworks */,
+				4996F8EE2EB1C76F00C8AD74 /* FirebaseCrashlytics in Frameworks */,
+				4996F8E62EB1C76F00C8AD74 /* FirebaseAnalyticsCore in Frameworks */,
+				4996F8EC2EB1C76F00C8AD74 /* FirebaseCore in Frameworks */,
 				49AB384E2EAEE31C00B40BB2 /* ImageColorSegmentation in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -132,6 +152,16 @@
 			name = Stratify;
 			packageProductDependencies = (
 				49AB384D2EAEE31C00B40BB2 /* ImageColorSegmentation */,
+				4996F8E32EB1C76F00C8AD74 /* FirebaseAnalytics */,
+				4996F8E52EB1C76F00C8AD74 /* FirebaseAnalyticsCore */,
+				4996F8E72EB1C76F00C8AD74 /* FirebaseAppCheck */,
+				4996F8E92EB1C76F00C8AD74 /* FirebaseAuth */,
+				4996F8EB2EB1C76F00C8AD74 /* FirebaseCore */,
+				4996F8ED2EB1C76F00C8AD74 /* FirebaseCrashlytics */,
+				4996F8EF2EB1C76F00C8AD74 /* FirebaseFunctions */,
+				4996F8F22EB1C79600C8AD74 /* NCCOpenAppleSearchAdsInstallAttribution */,
+				4996F8F52EB1C7E100C8AD74 /* RevenueCat */,
+				4996F8F72EB1C7E100C8AD74 /* RevenueCatUI */,
 			);
 			productName = IconDecomposer;
 			productReference = 494495862E8A08D10061A59E /* Stratify.app */;
@@ -240,6 +270,9 @@
 			packageReferences = (
 				494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */,
 				49AB384C2EAEE31C00B40BB2 /* XCLocalSwiftPackageReference "../ImageColorSegmentation" */,
+				4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				4996F8F12EB1C79600C8AD74 /* XCRemoteSwiftPackageReference "NCC-Open-Apple-Search-Ads-Install-Attribution" */,
+				4996F8F42EB1C7E100C8AD74 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 494495872E8A08D10061A59E /* Products */;
@@ -820,6 +853,30 @@
 				kind = branch;
 			};
 		};
+		4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 12.5.0;
+			};
+		};
+		4996F8F12EB1C79600C8AD74 /* XCRemoteSwiftPackageReference "NCC-Open-Apple-Search-Ads-Install-Attribution" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "git@github.com:drewster99/NCC-Open-Apple-Search-Ads-Install-Attribution.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+		4996F8F42EB1C7E100C8AD74 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/RevenueCat/purchases-ios-spm.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 5.45.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -827,6 +884,56 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 494EDE3B2E8CE8B900BD48FF /* XCRemoteSwiftPackageReference "SwiftKMeansPlusPlus" */;
 			productName = SwiftKMeansPlusPlus;
+		};
+		4996F8E32EB1C76F00C8AD74 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		4996F8E52EB1C76F00C8AD74 /* FirebaseAnalyticsCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalyticsCore;
+		};
+		4996F8E72EB1C76F00C8AD74 /* FirebaseAppCheck */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAppCheck;
+		};
+		4996F8E92EB1C76F00C8AD74 /* FirebaseAuth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAuth;
+		};
+		4996F8EB2EB1C76F00C8AD74 /* FirebaseCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCore;
+		};
+		4996F8ED2EB1C76F00C8AD74 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		4996F8EF2EB1C76F00C8AD74 /* FirebaseFunctions */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8E22EB1C76F00C8AD74 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseFunctions;
+		};
+		4996F8F22EB1C79600C8AD74 /* NCCOpenAppleSearchAdsInstallAttribution */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8F12EB1C79600C8AD74 /* XCRemoteSwiftPackageReference "NCC-Open-Apple-Search-Ads-Install-Attribution" */;
+			productName = NCCOpenAppleSearchAdsInstallAttribution;
+		};
+		4996F8F52EB1C7E100C8AD74 /* RevenueCat */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8F42EB1C7E100C8AD74 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCat;
+		};
+		4996F8F72EB1C7E100C8AD74 /* RevenueCatUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 4996F8F42EB1C7E100C8AD74 /* XCRemoteSwiftPackageReference "purchases-ios-spm" */;
+			productName = RevenueCatUI;
 		};
 		49AB384D2EAEE31C00B40BB2 /* ImageColorSegmentation */ = {
 			isa = XCSwiftPackageProductDependency;

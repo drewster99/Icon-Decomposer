@@ -31,3 +31,9 @@ force_cast:
   severity: warning
 force_try: 
   severity: warning
+
+exclude:
+- FunVoiceMinigame
+- SLIC_POC_MetalKMeans
+- SLIC_ProofOfConcept
+- StratifyMiniGame

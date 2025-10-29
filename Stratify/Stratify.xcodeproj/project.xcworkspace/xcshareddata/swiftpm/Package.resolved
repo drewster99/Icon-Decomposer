@@ -1,5 +1,5 @@
 {
-  "originHash" : "7740aecf0d3297373b62dac9c2dbfb8f933c487d2b20d559b935163ed52d3efb",
+  "originHash" : "732b29193a7d3124f1b1f08913b8ae6e9adf6dcc5bc19897c0cc7e5ccb2b6f6f",
   "pins" : [
     {
       "identity" : "abseil-cpp-binary",
@@ -114,8 +114,8 @@
       "kind" : "remoteSourceControl",
       "location" : "git@github.com:drewster99/NCC-Open-Apple-Search-Ads-Install-Attribution.git",
       "state" : {
-        "revision" : "fce600bed2b5cf28cce92a3a9083e28fb75832f8",
-        "version" : "1.0.0"
+        "revision" : "56daf4ef8050daab11d3ca2a17ab9d3cb7d72d9a",
+        "version" : "1.1.0"
       }
     },
     {

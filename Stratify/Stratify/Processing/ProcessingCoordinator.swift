@@ -145,7 +145,7 @@ class ProcessingCoordinator {
 
         // Convert to LAB
         func f(_ t: Float) -> Float {
-            let delta = 6.0 / 29.0
+            let delta: Float = 6.0 / 29.0
             if t > pow(delta, 3) {
                 return pow(t, 1.0/3.0)
             } else {

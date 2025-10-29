@@ -118,6 +118,52 @@ class ProcessingCoordinator {
         return context.makeImage()
     }
 
+    /// Convert sRGB (0-1 range) to CIE LAB color space
+    static func rgbToLab(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> {
+        // Convert sRGB to linear RGB
+        func srgbToLinear(_ c: Float) -> Float {
+            if c <= 0.04045 {
+                return c / 12.92
+            } else {
+                return pow((c + 0.055) / 1.055, 2.4)
+            }
+        }
+
+        let rLin = srgbToLinear(r)
+        let gLin = srgbToLinear(g)
+        let bLin = srgbToLinear(b)
+
+        // Convert linear RGB to XYZ (D65 illuminant)
+        let x = rLin * 0.4124564 + gLin * 0.3575761 + bLin * 0.1804375
+        let y = rLin * 0.2126729 + gLin * 0.7151522 + bLin * 0.0721750
+        let z = rLin * 0.0193339 + gLin * 0.1191920 + bLin * 0.9503041
+
+        // Normalize by D65 white point
+        let xn = x / 0.95047
+        let yn = y / 1.00000
+        let zn = z / 1.08883
+
+        // Convert to LAB
+        func f(_ t: Float) -> Float {
+            let delta = 6.0 / 29.0
+            if t > pow(delta, 3) {
+                return pow(t, 1.0/3.0)
+            } else {
+                return t / (3.0 * delta * delta) + 4.0 / 29.0
+            }
+        }
+
+        let fx = f(xn)
+        let fy = f(yn)
+        let fz = f(zn)
+
+        let l = 116.0 * fy - 16.0
+        let a = 500.0 * (fx - fy)
+        let b_lab = 200.0 * (fy - fz)
+
+        return SIMD3<Float>(l, a, b_lab)
+    }
+
     /// Analyze layer to get pixel count and average LAB color
     static func analyzeLayer(_ buffer: MTLBuffer, width: Int, height: Int) -> (pixelCount: Int, avgColor: SIMD3<Float>) {
         let bufferPointer = buffer.contents().bindMemory(to: UInt8.self, capacity: width * height * 4)
@@ -151,9 +197,7 @@ class ProcessingCoordinator {
             let avgG = gSum / Float(pixelCount) / 255.0
             let avgB = bSum / Float(pixelCount) / 255.0
 
-            // Convert RGB to LAB (simplified - just store RGB for now)
-            // TODO: Proper RGB to LAB conversion
-            let labColor = SIMD3<Float>(avgR * 100, avgG * 100 - 50, avgB * 100 - 50)
+            let labColor = rgbToLab(avgR, avgG, avgB)
 
             return (pixelCount, labColor)
         } else {

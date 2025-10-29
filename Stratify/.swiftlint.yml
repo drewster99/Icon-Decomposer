@@ -32,7 +32,7 @@ force_cast:
 force_try: 
   severity: warning
 
-exclude:
+excluded:
 - FunVoiceMinigame
 - SLIC_POC_MetalKMeans
 - SLIC_ProofOfConcept

@@ -37,7 +37,7 @@ struct xCheckerboardBackground: View {
     let squareSize: CGFloat = 10
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { _ in
             Canvas { context, size in
                 let rows = Int(ceil(size.height / squareSize))
                 let columns = Int(ceil(size.width / squareSize))
@@ -109,7 +109,6 @@ struct ContentView: View {
 
     // Test image names (will be added to Assets.xcassets)
     let testImageNames = ["TestIcon1", "TestIcon2", "TestIcon3", "TestIcon4", "TestIcon5", "TestIcon6", "TestIcon7"]
-
 
     // SLIC parameters (matching Python defaults)
     @State private var nSegments: Double = 1000
@@ -401,7 +400,7 @@ struct ContentView: View {
                         .padding(.horizontal)
 
                     VStack(spacing: 20) {
-                        ForEach(Array(iterationSnapshots.enumerated()), id: \.offset) { index, snapshot in
+                        ForEach(Array(iterationSnapshots.enumerated()), id: \.offset) { _, snapshot in
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Iteration \(snapshot.iterationNumber)")
                                     .font(.subheadline)
@@ -515,7 +514,7 @@ struct ContentView: View {
                         .padding(.horizontal)
 
                     VStack(spacing: 20) {
-                        ForEach(Array(mergeSnapshots.enumerated()), id: \.offset) { index, snapshot in
+                        ForEach(Array(mergeSnapshots.enumerated()), id: \.offset) { _, snapshot in
                             VStack(alignment: .leading, spacing: 10) {
                                 Text("Merge Step \(snapshot.stepNumber): Cluster \(snapshot.mergedClusterA) + Cluster \(snapshot.mergedClusterB)")
                                     .font(.subheadline)
@@ -1165,7 +1164,10 @@ struct ContentView: View {
         image.lockFocus()
 
         // Create different patterns for each test image
-        let context = NSGraphicsContext.current!.cgContext
+        guard let context = NSGraphicsContext.current?.cgContext else {
+            image.unlockFocus()
+            return image
+        }
 
             let colors = [NSColor.purple, NSColor.magenta]
             for y in stride(from: 0, to: 1024, by: 128) {
@@ -1175,7 +1177,6 @@ struct ContentView: View {
                     context.fill(CGRect(x: x, y: y, width: 128, height: 128))
                 }
             }
-
 
         image.unlockFocus()
         return image
@@ -1515,12 +1516,10 @@ struct ContentView: View {
 
         // Calculate alpha statistics for this layer
         var alphaValues: [UInt8] = []
-        for i in 0..<pixelClusters.count {
-            if pixelClusters[i] == layer.clusterId {
-                let pixelOffset = i * 4
-                let alpha = pixels[pixelOffset + 3]  // BGRA format, alpha is at +3
-                alphaValues.append(alpha)
-            }
+        for i in 0..<pixelClusters.count where pixelClusters[i] == layer.clusterId {
+            let pixelOffset = i * 4
+            let alpha = pixels[pixelOffset + 3]  // BGRA format, alpha is at +3
+            alphaValues.append(alpha)
         }
 
         if !alphaValues.isEmpty {
@@ -1535,32 +1534,28 @@ struct ContentView: View {
         print("\nSample pixels from this layer (first 20):")
         var sampleCount = 0
 
-        for i in 0..<pixelClusters.count {
-            if pixelClusters[i] == layer.clusterId {
-                let x = i % width
-                let y = i / width
-                let superpixelLabel = superpixelData.labelMap[i]
+        for i in 0..<pixelClusters.count where pixelClusters[i] == layer.clusterId {
+            let x = i % width
+            let y = i / width
+            let superpixelLabel = superpixelData.labelMap[i]
 
-                // Get BGRA values (premultiplied first + little endian = BGRA)
-                let pixelOffset = i * 4
-                let b = pixels[pixelOffset + 0]
-                let g = pixels[pixelOffset + 1]
-                let r = pixels[pixelOffset + 2]
-                let a = pixels[pixelOffset + 3]
+            // Get BGRA values (premultiplied first + little endian = BGRA)
+            let pixelOffset = i * 4
+            let b = pixels[pixelOffset + 0]
+            let g = pixels[pixelOffset + 1]
+            let r = pixels[pixelOffset + 2]
+            let a = pixels[pixelOffset + 3]
 
-                print(String(format: "  Pixel (%d, %d): RGBA=(%d,%d,%d,%d) superpixel=%d cluster=%d",
-                            x, y, r, g, b, a, superpixelLabel, pixelClusters[i]))
-                sampleCount += 1
-                if sampleCount >= 20 { break }
-            }
+            print(String(format: "  Pixel (%d, %d): RGBA=(%d,%d,%d,%d) superpixel=%d cluster=%d",
+                        x, y, r, g, b, a, superpixelLabel, pixelClusters[i]))
+            sampleCount += 1
+            if sampleCount >= 20 { break }
         }
 
         // Check for transparent or special labels
         var transparentCount = 0
-        for cluster in pixelClusters {
-            if cluster == transparentLabel {
-                transparentCount += 1
-            }
+        for cluster in pixelClusters where cluster == transparentLabel {
+            transparentCount += 1
         }
         if transparentCount > 0 {
             print("\nNote: \(transparentCount) pixels have transparent label (0xFFFFFFFE)")
@@ -1632,12 +1627,10 @@ struct ContentView: View {
         var clusterCounts = Array(repeating: 0, count: numClusters)
 
         // Accumulate LAB colors for each cluster
-        for (superpixelIndex, clusterAssignment) in clusterResult.clusterAssignments.enumerated() {
-            if superpixelIndex < superpixelData.superpixels.count {
-                let superpixel = superpixelData.superpixels[superpixelIndex]
-                clusterSums[clusterAssignment] += superpixel.labColor
-                clusterCounts[clusterAssignment] += 1
-            }
+        for (superpixelIndex, clusterAssignment) in clusterResult.clusterAssignments.enumerated() where superpixelIndex < superpixelData.superpixels.count {
+            let superpixel = superpixelData.superpixels[superpixelIndex]
+            clusterSums[clusterAssignment] += superpixel.labColor
+            clusterCounts[clusterAssignment] += 1
         }
 
         // Calculate averages
@@ -1944,17 +1937,17 @@ struct ContentView: View {
 
         for clusterId in uniqueClusters {
             var colorSum = SIMD3<Float>(0, 0, 0)
-            var count = 0
+            var itemCount = 0
 
             for (spIndex, assignment) in newAssignments.enumerated() {
                 if assignment == clusterId && spIndex < superpixelData.superpixels.count {
                     colorSum += superpixelData.superpixels[spIndex].labColor
-                    count += 1
+                    itemCount += 1
                 }
             }
 
-            if count > 0 {
-                newCenters.append(colorSum / Float(count))
+            if itemCount > 0 {
+                newCenters.append(colorSum / Float(itemCount))
             } else {
                 // Empty cluster - shouldn't happen but handle gracefully
                 newCenters.append(SIMD3<Float>(50, 0, 0))

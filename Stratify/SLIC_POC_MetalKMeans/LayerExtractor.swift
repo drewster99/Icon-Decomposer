@@ -13,14 +13,24 @@ import Metal
 class LayerExtractor {
 
     // Metal objects for GPU acceleration
-    private static let device = MTLCreateSystemDefaultDevice()!
-    private static let commandQueue = device.makeCommandQueue()!
-    private static let library = device.makeDefaultLibrary()!
+    private static let device: MTLDevice? = MTLCreateSystemDefaultDevice()
+    private static let commandQueue: MTLCommandQueue? = device?.makeCommandQueue()
+    private static let library: MTLLibrary? = device?.makeDefaultLibrary()
 
     // Lazy-loaded pipeline state
-    private static var extractLayerPipeline: MTLComputePipelineState = {
-        let function = library.makeFunction(name: "extractLayer")!
-        return try! device.makeComputePipelineState(function: function)
+    private static var extractLayerPipeline: MTLComputePipelineState? = {
+        guard let device = device,
+              let library = library,
+              let function = library.makeFunction(name: "extractLayer") else {
+            print("Failed to initialize Metal pipeline")
+            return nil
+        }
+        do {
+            return try device.makeComputePipelineState(function: function)
+        } catch {
+            print("Failed to create compute pipeline state: \(error)")
+            return nil
+        }
     }()
 
     /// Result containing an individual layer
@@ -191,6 +201,11 @@ class LayerExtractor {
         width: Int,
         height: Int
     ) {
+        guard let device = device else {
+            print("Metal device not available")
+            return
+        }
+
         let pixelCount = width * height
 
         // Create Metal buffers
@@ -229,8 +244,13 @@ class LayerExtractor {
         }
 
         // Dispatch Metal kernel
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandQueue = commandQueue,
+              let commandBuffer = commandQueue.makeCommandBuffer(),
+              let encoder = commandBuffer.makeComputeCommandEncoder(),
+              let extractLayerPipeline = extractLayerPipeline else {
+            print("Failed to create Metal command buffer or encoder")
+            return
+        }
 
         encoder.setComputePipelineState(extractLayerPipeline)
         encoder.setBuffer(originalBuffer, offset: 0, index: 0)
@@ -256,15 +276,21 @@ class LayerExtractor {
 
         // Copy results back to Data
         maskData.withUnsafeMutableBytes { maskBytes in
-            let maskPtr = maskBytes.bindMemory(to: UInt8.self)
+            guard let maskBaseAddress = maskBytes.baseAddress else {
+                print("Failed to get mask base address")
+                return
+            }
             let bufferMask = maskBuffer.contents().bindMemory(to: UInt8.self, capacity: pixelCount)
-            memcpy(maskPtr.baseAddress!, bufferMask, pixelCount)
+            memcpy(maskBaseAddress, bufferMask, pixelCount)
         }
 
         layerData.withUnsafeMutableBytes { layerBytes in
-            let layerPtr = layerBytes.bindMemory(to: UInt8.self)
+            guard let layerBaseAddress = layerBytes.baseAddress else {
+                print("Failed to get layer base address")
+                return
+            }
             let bufferLayer = layerBuffer.contents().bindMemory(to: UInt8.self, capacity: pixelCount * 4)
-            memcpy(layerPtr.baseAddress!, bufferLayer, pixelCount * 4)
+            memcpy(layerBaseAddress, bufferLayer, pixelCount * 4)
         }
     }
 

@@ -17,19 +17,16 @@ class SLICProcessor {
     private let library: MTLLibrary
     
     // Pipeline states
-    // These are implicitly unwrapped optionals because they can't be initialized until after
-    // the device and library are available. They're guaranteed to be non-nil after successful
-    // initialization since init?() returns nil if any pipeline creation fails.
-    private var gaussianBlurPipeline: MTLComputePipelineState!
-    private var rgbToLabPipeline: MTLComputePipelineState!
-    private var initializeCentersPipeline: MTLComputePipelineState!
-    private var assignPixelsPipeline: MTLComputePipelineState!
-    private var updateCentersPipeline: MTLComputePipelineState!
-    private var finalizeCentersPipeline: MTLComputePipelineState!
-    private var clearAccumulatorsPipeline: MTLComputePipelineState!
-    private var clearDistancesPipeline: MTLComputePipelineState!
-    private var enforceConnectivityPipeline: MTLComputePipelineState!
-    private var drawBoundariesPipeline: MTLComputePipelineState!
+    private var gaussianBlurPipeline: MTLComputePipelineState?
+    private var rgbToLabPipeline: MTLComputePipelineState?
+    private var initializeCentersPipeline: MTLComputePipelineState?
+    private var assignPixelsPipeline: MTLComputePipelineState?
+    private var updateCentersPipeline: MTLComputePipelineState?
+    private var finalizeCentersPipeline: MTLComputePipelineState?
+    private var clearAccumulatorsPipeline: MTLComputePipelineState?
+    private var clearDistancesPipeline: MTLComputePipelineState?
+    private var enforceConnectivityPipeline: MTLComputePipelineState?
+    private var drawBoundariesPipeline: MTLComputePipelineState?
     
     // Parameters
     struct Parameters {
@@ -230,11 +227,12 @@ class SLICProcessor {
         }
         
         // Step 1: Gaussian Blur
-        if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.setComputePipelineState(gaussianBlurPipeline)
+        if let encoder = commandBuffer.makeComputeCommandEncoder(),
+           let pipeline = gaussianBlurPipeline {
+            encoder.setComputePipelineState(pipeline)
             encoder.setTexture(inputTexture, index: 0)
             encoder.setTexture(blurredTexture, index: 1)
-            
+
             let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
             encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -242,11 +240,12 @@ class SLICProcessor {
         }
         
         // Step 2: RGB to LAB conversion
-        if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.setComputePipelineState(rgbToLabPipeline)
+        if let encoder = commandBuffer.makeComputeCommandEncoder(),
+           let pipeline = rgbToLabPipeline {
+            encoder.setComputePipelineState(pipeline)
             encoder.setTexture(blurredTexture, index: 0)
             encoder.setBuffer(labBuffer, offset: 0, index: 0)
-            
+
             let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
             encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -254,12 +253,13 @@ class SLICProcessor {
         }
         
         // Step 3: Initialize centers
-        if let encoder = commandBuffer.makeComputeCommandEncoder() {
-            encoder.setComputePipelineState(initializeCentersPipeline)
+        if let encoder = commandBuffer.makeComputeCommandEncoder(),
+           let pipeline = initializeCentersPipeline {
+            encoder.setComputePipelineState(pipeline)
             encoder.setBuffer(labBuffer, offset: 0, index: 0)
             encoder.setBuffer(centersBuffer, offset: 0, index: 1)
             encoder.setBuffer(paramsBuffer, offset: 0, index: 2)
-            
+
             let threadsPerGrid = MTLSize(width: numCenters, height: 1, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: min(numCenters, 256), height: 1, depth: 1)
             encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -287,11 +287,12 @@ class SLICProcessor {
             }
             
             // Clear distances for new iteration using GPU
-            if let encoder = iterCommandBuffer.makeComputeCommandEncoder() {
-                encoder.setComputePipelineState(clearDistancesPipeline)
+            if let encoder = iterCommandBuffer.makeComputeCommandEncoder(),
+               let pipeline = clearDistancesPipeline {
+                encoder.setComputePipelineState(pipeline)
                 encoder.setBuffer(distancesBuffer, offset: 0, index: 0)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 1)
-                
+
                 let threadsPerGrid = MTLSize(width: width * height, height: 1, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: 256, height: 1, depth: 1)
                 encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -299,14 +300,15 @@ class SLICProcessor {
             }
             
             // Assign pixels to nearest centers
-            if let encoder = iterCommandBuffer.makeComputeCommandEncoder() {
-                encoder.setComputePipelineState(assignPixelsPipeline)
+            if let encoder = iterCommandBuffer.makeComputeCommandEncoder(),
+               let pipeline = assignPixelsPipeline {
+                encoder.setComputePipelineState(pipeline)
                 encoder.setBuffer(labBuffer, offset: 0, index: 0)
                 encoder.setBuffer(centersBuffer, offset: 0, index: 1)
                 encoder.setBuffer(labelsBuffer, offset: 0, index: 2)
                 encoder.setBuffer(distancesBuffer, offset: 0, index: 3)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 4)
-                
+
                 let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
                 encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -314,11 +316,12 @@ class SLICProcessor {
             }
             
             // Clear accumulators
-            if let encoder = iterCommandBuffer.makeComputeCommandEncoder() {
-                encoder.setComputePipelineState(clearAccumulatorsPipeline)
+            if let encoder = iterCommandBuffer.makeComputeCommandEncoder(),
+               let pipeline = clearAccumulatorsPipeline {
+                encoder.setComputePipelineState(pipeline)
                 encoder.setBuffer(accumulatorBuffer, offset: 0, index: 0)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 1)
-                
+
                 let threadsPerGrid = MTLSize(width: numCenters, height: 1, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: min(numCenters, 256), height: 1, depth: 1)
                 encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -326,14 +329,15 @@ class SLICProcessor {
             }
             
             // Update centers (accumulate)
-            if let encoder = iterCommandBuffer.makeComputeCommandEncoder() {
-                encoder.setComputePipelineState(updateCentersPipeline)
+            if let encoder = iterCommandBuffer.makeComputeCommandEncoder(),
+               let pipeline = updateCentersPipeline {
+                encoder.setComputePipelineState(pipeline)
                 encoder.setBuffer(labBuffer, offset: 0, index: 0)
                 encoder.setBuffer(labelsBuffer, offset: 0, index: 1)
                 encoder.setBuffer(centersBuffer, offset: 0, index: 2)
                 encoder.setBuffer(accumulatorBuffer, offset: 0, index: 3)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 4)
-                
+
                 let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
                 encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -341,12 +345,13 @@ class SLICProcessor {
             }
             
             // Finalize centers (compute means)
-            if let encoder = iterCommandBuffer.makeComputeCommandEncoder() {
-                encoder.setComputePipelineState(finalizeCentersPipeline)
+            if let encoder = iterCommandBuffer.makeComputeCommandEncoder(),
+               let pipeline = finalizeCentersPipeline {
+                encoder.setComputePipelineState(pipeline)
                 encoder.setBuffer(accumulatorBuffer, offset: 0, index: 0)
                 encoder.setBuffer(centersBuffer, offset: 0, index: 1)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 2)
-                
+
                 let threadsPerGrid = MTLSize(width: numCenters, height: 1, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: min(numCenters, 256), height: 1, depth: 1)
                 encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -376,12 +381,13 @@ class SLICProcessor {
             let labelsCopyPointer = labelsBufferCopy.contents().bindMemory(to: UInt32.self, capacity: width * height)
             memcpy(labelsCopyPointer, labelsPointer, labelsBufferSize)
             
-            if let encoder = connectivityBuffer.makeComputeCommandEncoder() {
-                encoder.setComputePipelineState(enforceConnectivityPipeline)
+            if let encoder = connectivityBuffer.makeComputeCommandEncoder(),
+               let pipeline = enforceConnectivityPipeline {
+                encoder.setComputePipelineState(pipeline)
                 encoder.setBuffer(labelsBuffer, offset: 0, index: 0)
                 encoder.setBuffer(labelsBufferCopy, offset: 0, index: 1)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 2)
-                
+
                 let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
                 encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -402,13 +408,14 @@ class SLICProcessor {
             return nil
         }
         
-        if let encoder = boundaryBuffer.makeComputeCommandEncoder() {
-            encoder.setComputePipelineState(drawBoundariesPipeline)
+        if let encoder = boundaryBuffer.makeComputeCommandEncoder(),
+           let pipeline = drawBoundariesPipeline {
+            encoder.setComputePipelineState(pipeline)
             encoder.setTexture(inputTexture, index: 0)
             encoder.setTexture(outputTexture, index: 1)
             encoder.setBuffer(labelsBuffer, offset: 0, index: 0)
             encoder.setBuffer(paramsBuffer, offset: 0, index: 1)
-            
+
             let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
             encoder.dispatchThreads(threadsPerGrid, threadsPerThreadgroup: threadsPerThreadgroup)
@@ -469,8 +476,7 @@ class SLICProcessor {
                                       bytesPerRow: bytesPerRow,
                                       space: colorSpace,
                                       bitmapInfo: bitmapInfo) else {
-            // TODO: Handle this
-            print("Failed to create CGContext for loading image")
+            print("Error: Failed to create CGContext for loading image")
             return
         }
         let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
@@ -511,8 +517,7 @@ class SLICProcessor {
                                                 releaseData: { _, data, _ in
             data.deallocate()
         }) else {
-            // TODO: Handle this failure
-            print("textureToNSImage failed to create CGDataProvider")
+            print("Error: textureToNSImage failed to create CGDataProvider")
             data.deallocate()
             return NSImage(size: NSSize(width: width, height: height))
         }
@@ -528,8 +533,7 @@ class SLICProcessor {
                                     decode: nil,
                                     shouldInterpolate: true,
                                     intent: .defaultIntent) else {
-            // TODO: Handle this failure
-            print("textureToNSImage failed to create CGImage")
+            print("Error: textureToNSImage failed to create CGImage")
             data.deallocate()
             return NSImage(size: NSSize(width: width, height: height))
         }

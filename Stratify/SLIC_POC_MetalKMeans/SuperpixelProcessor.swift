@@ -23,19 +23,48 @@ struct SuperpixelExtractionParams {
 class SuperpixelProcessor {
 
     // Metal objects for GPU acceleration
-    private static let device = MTLCreateSystemDefaultDevice()!
-    private static let commandQueue = device.makeCommandQueue()!
-    private static let library = device.makeDefaultLibrary()!
+    private static let device: MTLDevice = {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            fatalError("Metal is not supported on this device")
+        }
+        return device
+    }()
+
+    private static let commandQueue: MTLCommandQueue = {
+        guard let queue = device.makeCommandQueue() else {
+            fatalError("Failed to create Metal command queue")
+        }
+        return queue
+    }()
+
+    private static let library: MTLLibrary = {
+        guard let library = device.makeDefaultLibrary() else {
+            fatalError("Failed to load Metal default library")
+        }
+        return library
+    }()
 
     // Lazy-loaded pipeline states
     private static var findMaxLabelPipeline: MTLComputePipelineState = {
-        let function = library.makeFunction(name: "findMaxLabel")!
-        return try! device.makeComputePipelineState(function: function)
+        guard let function = library.makeFunction(name: "findMaxLabel") else {
+            fatalError("Failed to load findMaxLabel Metal function")
+        }
+        do {
+            return try device.makeComputePipelineState(function: function)
+        } catch {
+            fatalError("Failed to create findMaxLabel pipeline state: \(error)")
+        }
     }()
 
     private static var accumulateSuperpixelFeaturesPipeline: MTLComputePipelineState = {
-        let function = library.makeFunction(name: "accumulateSuperpixelFeatures")!
-        return try! device.makeComputePipelineState(function: function)
+        guard let function = library.makeFunction(name: "accumulateSuperpixelFeatures") else {
+            fatalError("Failed to load accumulateSuperpixelFeatures Metal function")
+        }
+        do {
+            return try device.makeComputePipelineState(function: function)
+        } catch {
+            fatalError("Failed to create accumulateSuperpixelFeatures pipeline state: \(error)")
+        }
     }()
 
     /// Represents a superpixel with its average color and metadata
@@ -103,9 +132,17 @@ class SuperpixelProcessor {
                 let label = labelsPointer[idx]
                 let labColor = labPointer[idx]
 
-                colorAccumulators[label]! += labColor
-                positionAccumulators[label]! += SIMD2<Float>(Float(x), Float(y))
-                pixelCounts[label]! += 1
+                if var color = colorAccumulators[label] {
+                    color += labColor
+                    colorAccumulators[label] = color
+                }
+                if var position = positionAccumulators[label] {
+                    position += SIMD2<Float>(Float(x), Float(y))
+                    positionAccumulators[label] = position
+                }
+                if let count = pixelCounts[label] {
+                    pixelCounts[label] = count + 1
+                }
             }
         }
 
@@ -113,16 +150,20 @@ class SuperpixelProcessor {
         var superpixels: [Superpixel] = []
 
         for label in uniqueLabels.sorted() {
-            let count = pixelCounts[label]!
-            guard count > 0 else { continue }
+            guard let pixelCount = pixelCounts[label], pixelCount != 0 else { continue }
 
-            let avgColor = colorAccumulators[label]! / Float(count)
-            let avgPosition = positionAccumulators[label]! / Float(count)
+            guard let avgColorAccumulator = colorAccumulators[label],
+                  let avgPositionAccumulator = positionAccumulators[label] else {
+                continue
+            }
+
+            let avgColor = avgColorAccumulator / Float(pixelCount)
+            let avgPosition = avgPositionAccumulator / Float(pixelCount)
 
             let superpixel = Superpixel(
                 id: Int(label),
                 labColor: avgColor,
-                pixelCount: count,
+                pixelCount: pixelCount,
                 centerPosition: avgPosition
             )
             superpixels.append(superpixel)
@@ -183,20 +224,26 @@ class SuperpixelProcessor {
         let buffersStart = CFAbsoluteTimeGetCurrent()
         #endif
 
-        let colorAccumulatorsBuffer = device.makeBuffer(
+        guard let colorAccumulatorsBuffer = device.makeBuffer(
             length: MemoryLayout<Float>.size * numSuperpixels * 3,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create colorAccumulatorsBuffer")
+        }
 
-        let positionAccumulatorsBuffer = device.makeBuffer(
+        guard let positionAccumulatorsBuffer = device.makeBuffer(
             length: MemoryLayout<Float>.size * numSuperpixels * 2,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create positionAccumulatorsBuffer")
+        }
 
-        let pixelCountsBuffer = device.makeBuffer(
+        guard let pixelCountsBuffer = device.makeBuffer(
             length: MemoryLayout<Int32>.size * numSuperpixels,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create pixelCountsBuffer")
+        }
 
         // Zero out the accumulator buffers
         memset(colorAccumulatorsBuffer.contents(), 0, colorAccumulatorsBuffer.length)
@@ -220,8 +267,12 @@ class SuperpixelProcessor {
         let gpuAccumulateStart = CFAbsoluteTimeGetCurrent()
         #endif
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create Metal command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create Metal compute encoder")
+        }
 
         encoder.setComputePipelineState(accumulateSuperpixelFeaturesPipeline)
         encoder.setBuffer(labBuffer, offset: 0, index: 0)
@@ -263,14 +314,14 @@ class SuperpixelProcessor {
 
         // Build uniqueLabels by scanning pixelCounts array (avoids full labelMap scan)
         for labelInt in 0..<numSuperpixels {
-            let count = Int(pixelCounts[labelInt])
+            let pixelCount = Int(pixelCounts[labelInt])
 
-            guard count > 0 else { continue }
+            guard pixelCount != 0 else { continue }
 
             // Skip transparent pixels (assigned to special trash label)
             let transparentLabel: UInt32 = 0xFFFFFFFE
             if UInt32(labelInt) == transparentLabel {
-                transparentPixelCount = count
+                transparentPixelCount = pixelCount
                 continue
             }
 
@@ -279,21 +330,21 @@ class SuperpixelProcessor {
             // Calculate averages
             let colorBaseIndex = labelInt * 3
             let avgColor = SIMD3<Float>(
-                colorAccumulators[colorBaseIndex + 0] / Float(count),
-                colorAccumulators[colorBaseIndex + 1] / Float(count),
-                colorAccumulators[colorBaseIndex + 2] / Float(count)
+                colorAccumulators[colorBaseIndex + 0] / Float(pixelCount),
+                colorAccumulators[colorBaseIndex + 1] / Float(pixelCount),
+                colorAccumulators[colorBaseIndex + 2] / Float(pixelCount)
             )
 
             let positionBaseIndex = labelInt * 2
             let avgPosition = SIMD2<Float>(
-                positionAccumulators[positionBaseIndex + 0] / Float(count),
-                positionAccumulators[positionBaseIndex + 1] / Float(count)
+                positionAccumulators[positionBaseIndex + 0] / Float(pixelCount),
+                positionAccumulators[positionBaseIndex + 1] / Float(pixelCount)
             )
 
             let superpixel = Superpixel(
                 id: labelInt,
                 labColor: avgColor,
-                pixelCount: count,
+                pixelCount: pixelCount,
                 centerPosition: avgPosition
             )
             superpixels.append(superpixel)

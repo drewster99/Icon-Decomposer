@@ -61,9 +61,26 @@ class KMeansProcessor {
     }
 
     // Metal objects
-    private static let device = MTLCreateSystemDefaultDevice()!
-    private static let commandQueue = device.makeCommandQueue()!
-    private static let library = device.makeDefaultLibrary()!
+    private static let device: MTLDevice = {
+        guard let device = MTLCreateSystemDefaultDevice() else {
+            fatalError("Metal is not supported on this device")
+        }
+        return device
+    }()
+
+    private static let commandQueue: MTLCommandQueue = {
+        guard let queue = device.makeCommandQueue() else {
+            fatalError("Failed to create Metal command queue")
+        }
+        return queue
+    }()
+
+    private static let library: MTLLibrary = {
+        guard let library = device.makeDefaultLibrary() else {
+            fatalError("Failed to load Metal library")
+        }
+        return library
+    }()
 
     // Metal compute pipelines
     private static let calculateMinDistancesPipeline = createPipeline(functionName: "calculateMinDistances")
@@ -76,8 +93,14 @@ class KMeansProcessor {
     private static let applyColorWeightingPipeline = createPipeline(functionName: "applyColorWeighting")
 
     private static func createPipeline(functionName: String) -> MTLComputePipelineState {
-        let function = library.makeFunction(name: functionName)!
-        return try! device.makeComputePipelineState(function: function)
+        guard let function = library.makeFunction(name: functionName) else {
+            fatalError("Failed to load Metal function: \(functionName)")
+        }
+        do {
+            return try device.makeComputePipelineState(function: function)
+        } catch {
+            fatalError("Failed to create pipeline state for \(functionName): \(error)")
+        }
     }
 
     /// Perform K-means++ clustering on superpixel colors
@@ -115,11 +138,13 @@ class KMeansProcessor {
         let totalStartTime = CFAbsoluteTimeGetCurrent()
 
         // Create Metal buffers
-        let originalColorsBuffer = device.makeBuffer(
+        guard let originalColorsBuffer = device.makeBuffer(
             bytes: originalColors,
             length: MemoryLayout<SIMD3<Float>>.size * numPoints,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create originalColorsBuffer")
+        }
 
         // Buffer for colors (either weighted or original)
         let colorsBuffer: MTLBuffer
@@ -147,47 +172,63 @@ class KMeansProcessor {
         #endif
 
         // Create buffers for main iteration
-        var centersBuffer = device.makeBuffer(
+        guard var centersBuffer = device.makeBuffer(
             bytes: initialCenters,
             length: MemoryLayout<SIMD3<Float>>.size * numClusters,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create centersBuffer")
+        }
 
-        var newCentersBuffer = device.makeBuffer(
+        guard var newCentersBuffer = device.makeBuffer(
             length: MemoryLayout<SIMD3<Float>>.size * numClusters,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create newCentersBuffer")
+        }
 
-        let assignmentsBuffer = device.makeBuffer(
+        guard let assignmentsBuffer = device.makeBuffer(
             length: MemoryLayout<Int32>.size * numPoints,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create assignmentsBuffer")
+        }
 
-        let distancesBuffer = device.makeBuffer(
+        guard let distancesBuffer = device.makeBuffer(
             length: MemoryLayout<Float>.size * numPoints,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create distancesBuffer")
+        }
 
         // Buffer for cluster sums - store as flat array of floats (3 per cluster) for atomic operations
-        let clusterSumsBuffer = device.makeBuffer(
+        guard let clusterSumsBuffer = device.makeBuffer(
             length: MemoryLayout<Float>.size * numClusters * 3,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create clusterSumsBuffer")
+        }
 
-        let clusterCountsBuffer = device.makeBuffer(
+        guard let clusterCountsBuffer = device.makeBuffer(
             length: MemoryLayout<Int32>.size * numClusters,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create clusterCountsBuffer")
+        }
 
-        let centerDeltasBuffer = device.makeBuffer(
+        guard let centerDeltasBuffer = device.makeBuffer(
             length: MemoryLayout<Float>.size * numClusters,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create centerDeltasBuffer")
+        }
 
-        let totalDeltaBuffer = device.makeBuffer(
+        guard let totalDeltaBuffer = device.makeBuffer(
             length: MemoryLayout<Float>.size,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create totalDeltaBuffer")
+        }
 
         // Main K-means iteration
         var converged = false
@@ -313,7 +354,9 @@ class KMeansProcessor {
         // In Debug builds, each kernel already waited, so this is redundant but harmless
         #if !DEBUG
         // Need to create and wait on a dummy command buffer to ensure previous work is done
-        let finalSyncBuffer = commandQueue.makeCommandBuffer()!
+        guard let finalSyncBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create final sync command buffer")
+        }
         finalSyncBuffer.commit()
         finalSyncBuffer.waitUntilCompleted()
         #endif
@@ -385,17 +428,21 @@ class KMeansProcessor {
         for _ in 1..<numClusters {
 
             // Create buffer for current centers
-            let currentCentersBuffer = device.makeBuffer(
+            guard let currentCentersBuffer = device.makeBuffer(
                 bytes: centers,
                 length: MemoryLayout<SIMD3<Float>>.size * centers.count,
                 options: .storageModeShared
-            )!
+            ) else {
+                fatalError("Failed to create currentCentersBuffer")
+            }
 
             // Calculate min distances to existing centers
-            let minDistancesBuffer = device.makeBuffer(
+            guard let minDistancesBuffer = device.makeBuffer(
                 length: MemoryLayout<Float>.size * numPoints,
                 options: .storageModeShared
-            )!
+            ) else {
+                fatalError("Failed to create minDistancesBuffer")
+            }
 
             calculateMinDistancesToCenters(
                 points: colors,
@@ -406,15 +453,19 @@ class KMeansProcessor {
             )
 
             // Calculate D² probabilities
-            let probabilitiesBuffer = device.makeBuffer(
+            guard let probabilitiesBuffer = device.makeBuffer(
                 length: MemoryLayout<Float>.size * numPoints,
                 options: .storageModeShared
-            )!
+            ) else {
+                fatalError("Failed to create probabilitiesBuffer")
+            }
 
-            let totalSumBuffer = device.makeBuffer(
+            guard let totalSumBuffer = device.makeBuffer(
                 length: MemoryLayout<Float>.size,
                 options: .storageModeShared
-            )!
+            ) else {
+                fatalError("Failed to create totalSumBuffer")
+            }
 
             totalSumBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee = 0
             let totalSumBeforeCall = totalSumBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee
@@ -448,12 +499,10 @@ class KMeansProcessor {
             // Sample
             let random = Float.random(in: 0..<1)
             var selectedIndex = numPoints - 1
-            for i in 0..<numPoints {
-                if cumulative[i] >= random {
-                    print(">>> SAMPLED point i=\(i) from \(numPoints) points: random=\(random), cumulative[i]=\(cumulative[i])")
-                    selectedIndex = i
-                    break
-                }
+            for i in 0..<numPoints where cumulative[i] >= random {
+                print(">>> SAMPLED point i=\(i) from \(numPoints) points: random=\(random), cumulative[i]=\(cumulative[i])")
+                selectedIndex = i
+                break
             }
 
             centers.append(colorsPointer[selectedIndex])
@@ -475,10 +524,12 @@ class KMeansProcessor {
         numPoints: Int
     ) -> MTLBuffer {
 
-        let weightedColorsBuffer = device.makeBuffer(
+        guard let weightedColorsBuffer = device.makeBuffer(
             length: MemoryLayout<SIMD3<Float>>.size * numPoints,
             options: .storageModeShared
-        )!
+        ) else {
+            fatalError("Failed to create weightedColorsBuffer")
+        }
 
         var params = KMeansParams(
             numPoints: UInt32(numPoints),
@@ -487,8 +538,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(applyColorWeightingPipeline)
         encoder.setBuffer(originalColors, offset: 0, index: 0)
@@ -530,8 +585,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(calculateMinDistancesPipeline)
         encoder.setBuffer(points, offset: 0, index: 0)
@@ -567,8 +626,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(calculateDistanceSquaredProbabilitiesPipeline)
         encoder.setBuffer(minDistances, offset: 0, index: 0)
@@ -606,8 +669,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(assignPointsToClustersPipeline)
         encoder.setBuffer(points, offset: 0, index: 0)
@@ -643,8 +710,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(clearClusterAccumulatorsPipeline)
         encoder.setBuffer(clusterSums, offset: 0, index: 0)
@@ -681,8 +752,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(accumulateClusterDataPipeline)
         encoder.setBuffer(points, offset: 0, index: 0)
@@ -721,8 +796,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(updateClusterCentersPipeline)
         encoder.setBuffer(clusterSums, offset: 0, index: 0)
@@ -759,8 +838,12 @@ class KMeansProcessor {
             convergenceThreshold: 0
         )
 
-        let commandBuffer = commandQueue.makeCommandBuffer()!
-        let encoder = commandBuffer.makeComputeCommandEncoder()!
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            fatalError("Failed to create command buffer")
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            fatalError("Failed to create compute encoder")
+        }
 
         encoder.setComputePipelineState(checkConvergencePipeline)
         encoder.setBuffer(centerDeltas, offset: 0, index: 0)
@@ -952,7 +1035,7 @@ class KMeansProcessor {
 
 // Extension for string repetition (used for logging)
 extension String {
-    static func *(left: String, right: Int) -> String {
+    static func * (left: String, right: Int) -> String {
         return String(repeating: left, count: right)
     }
 }

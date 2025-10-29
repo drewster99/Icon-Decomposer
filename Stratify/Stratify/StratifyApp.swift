@@ -33,7 +33,9 @@ struct StratifyApp: App {
 
             CommandGroup(replacing: .help) {
                 Button("\(AppInfo.appName) Help") {
-                    // TODO: Open help
+                    if let url = URL(string: "https://github.com/ajb/icon-decomposer") {
+                        NSWorkspace.shared.open(url)
+                    }
                 }
             }
         }
@@ -51,7 +53,7 @@ struct StratifyApp: App {
                 }
             })
         }
-        .handlesExternalEvents(matching: Set(arrayLiteral: "welcome"))
+        .handlesExternalEvents(matching: ["welcome"])
     }
 }
 
@@ -72,9 +74,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         // Check if we should show welcome window (first launch or 60+ days)
-        if shouldShowWelcomeWindow() {
+        if shouldShowWelcomeWindow(), let welcomeURL = URL(string: "stratify://welcome") {
             // Open the welcome window
-            NSWorkspace.shared.open(URL(string: "stratify://welcome")!)
+            NSWorkspace.shared.open(welcomeURL)
         }
 
         // Update last launch date

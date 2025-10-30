@@ -94,13 +94,9 @@ public class KMeansProcessor {
             throw PipelineError.executionFailed("Failed to create colors buffer")
         }
 
-        // Apply color weighting (reduce L channel influence, enhance green separation)
-        let colorsBuffer = try applyWeighting(
-            originalColors: originalColorsBuffer,
-            lightnessWeight: lightnessWeight,
-            greenAxisScale: greenAxisScale,
-            numPoints: numPoints
-        )
+        // SKIP color weighting here - it's already applied in SLIC's rgbToLab kernel
+        // This prevents double-application of lightnessWeight and greenAxisScale
+        let colorsBuffer = originalColorsBuffer
 
         // Initialize centers using K-means++
         let initialCenters = try initializeKMeansPlusPlus(

@@ -48,6 +48,7 @@ class SegmentationOperation: PipelineOperation {
         // Get color adjustments from metadata (set by color conversion operation)
         let adjustments = context.metadata["labColorAdjustments"] as? LABColorAdjustments ?? .default
         let greenAxisScale = adjustments.greenAxisScale
+        let lightnessWeight = adjustments.lightnessScale
 
         // Create texture from buffer
         let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
@@ -89,6 +90,7 @@ class SegmentationOperation: PipelineOperation {
             nSegments: superpixelCount,
             compactness: compactness,
             greenAxisScale: greenAxisScale,
+            lightnessWeight: lightnessWeight,
             iterations: 10,
             enforceConnectivity: true
         )

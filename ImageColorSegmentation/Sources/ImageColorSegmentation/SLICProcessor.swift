@@ -57,6 +57,7 @@ public class SLICProcessor {
         nSegments: Int,
         compactness: Float,
         greenAxisScale: Float,
+        lightnessWeight: Float = 0.35,
         iterations: Int = 10,
         enforceConnectivity: Bool = true
     ) throws -> (labBuffer: MTLBuffer, labelsBuffer: MTLBuffer, alphaBuffer: MTLBuffer, numCenters: Int) {
@@ -161,6 +162,9 @@ public class SLICProcessor {
 
             var greenScale = greenAxisScale
             encoder.setBytes(&greenScale, length: MemoryLayout<Float>.size, index: 2)
+
+            var lightnessScale = lightnessWeight
+            encoder.setBytes(&lightnessScale, length: MemoryLayout<Float>.size, index: 3)
 
             let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)

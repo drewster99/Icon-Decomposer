@@ -102,6 +102,7 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
                      device float3* labBuffer [[buffer(0)]],
                      device float* alphaBuffer [[buffer(1)]],
                      constant float& greenAxisScale [[buffer(2)]],
+                     constant float& lightnessWeight [[buffer(3)]],
                      uint2 gid [[thread_position_in_grid]]) {
 
     uint width = rgbTexture.get_width();
@@ -157,6 +158,12 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
     float L = 116.0 * f.y - 16.0;
     float a = 500.0 * (f.x - f.y);
     float b = 200.0 * (f.y - f.z);
+
+    // Apply color adjustments in SLIC (not in K-means)
+    // This ensures adjustments are applied once, consistently across the pipeline
+
+    // Scale L channel to reduce lightness influence
+    L *= lightnessWeight;
 
     // Scale negative 'a' values (green axis) to enhance green separation
     if (a < 0.0) {

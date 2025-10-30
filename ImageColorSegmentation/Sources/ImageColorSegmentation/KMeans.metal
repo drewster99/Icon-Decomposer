@@ -300,14 +300,13 @@ inline float calculateWeightedDistance5D(
     float3 colorDiff = colorA - colorB;
     float2 spatialDiff = spatialA - spatialB;
 
-    float colorDist = length(colorDiff);
-    float spatialDist = length(spatialDiff);
+    // Calculate squared distances first
+    float colorDistSquared = dot(colorDiff, colorDiff);
+    float spatialDistSquared = dot(spatialDiff, spatialDiff);
 
-    // Weighted combined distance
-    float weightedColorDist = colorDist * colorWeight;
-    float weightedSpatialDist = spatialDist * spatialWeight;
-
-    return sqrt(weightedColorDist * weightedColorDist + weightedSpatialDist * weightedSpatialDist);
+    // Apply weights to squared distances (standard weighted Euclidean distance)
+    // This gives proper linear weighting: colorWeight=0.7 → 70% contribution
+    return sqrt(colorWeight * colorDistSquared + spatialWeight * spatialDistSquared);
 }
 
 // Calculate minimum distance from each point to any existing center (5D)

@@ -184,7 +184,17 @@ public class ImagePipeline {
             throw PipelineError.executionFailed("Failed to create CGContext")
         }
 
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
+
+        // Composite semi-transparent/transparent pixels over white background
+        // This ensures transparent pixels cluster as white instead of black
+        #if os(macOS)
+        context.setFillColor(NSColor.white.cgColor)
+        #else
+        context.setFillColor(UIColor.white.cgColor)
+        #endif
+        context.fill(fullRect)
+        context.draw(cgImage, in: fullRect)
 
         return buffer
     }

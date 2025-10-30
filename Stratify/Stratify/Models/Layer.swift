@@ -14,7 +14,6 @@ struct Layer: Identifiable, Codable, Sendable {
     var name: String
     var pixelCount: Int
     var averageColor: SIMD3<Float>  // LAB color space
-    var isSelected: Bool
 
     /// Image data stored as PNG
     private var imageData: Data
@@ -39,13 +38,11 @@ struct Layer: Identifiable, Codable, Sendable {
          name: String,
          cgImage: CGImage,
          pixelCount: Int,
-         averageColor: SIMD3<Float>,
-         isSelected: Bool = true) {
+         averageColor: SIMD3<Float>) {
         self.id = id
         self.name = name
         self.pixelCount = pixelCount
         self.averageColor = averageColor
-        self.isSelected = isSelected
 
         // Store explicit pixel dimensions from CGImage
         self.pixelWidth = cgImage.width
@@ -71,8 +68,7 @@ struct Layer: Identifiable, Codable, Sendable {
          pixelWidth: Int,
          pixelHeight: Int,
          pixelCount: Int,
-         averageColor: SIMD3<Float>,
-         isSelected: Bool = true) {
+         averageColor: SIMD3<Float>) {
         self.id = id
         self.name = name
         self.imageData = imageData
@@ -80,7 +76,6 @@ struct Layer: Identifiable, Codable, Sendable {
         self.pixelHeight = pixelHeight
         self.pixelCount = pixelCount
         self.averageColor = averageColor
-        self.isSelected = isSelected
     }
 
     // Make Layer mutable for renaming

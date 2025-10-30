@@ -17,6 +17,7 @@ struct LayerFlowGrid: View {
     let selectedLayerIDs: Set<UUID>
     let onToggle: (UUID) -> Void
     let onDrop: (Layer, Layer) -> Void
+    var debugTransparency: Bool = false
 
     private func calculateOptimalLayout(width: CGFloat, height: CGFloat, layerCount: Int) -> (columnCount: Int, itemSize: CGFloat) {
         let spacing: CGFloat = 12
@@ -75,7 +76,8 @@ struct LayerFlowGrid: View {
                             },
                             onDrop: { droppedLayer in
                                 onDrop(droppedLayer, layer)
-                            }
+                            },
+                            debugTransparency: debugTransparency
                         )
                     }
                 }
@@ -90,13 +92,24 @@ struct LayerGridItem: View {
     let isSelected: Bool
     let onToggle: () -> Void
     let onDrop: (Layer) -> Void
+    var debugTransparency: Bool = false
 
     @State private var isDragTarget = false
+
+    private var displayImage: NSImage? {
+        guard let image = layer.image else { return nil }
+        #if DEBUG
+        if debugTransparency {
+            return DocumentView.debugVisualizeTransparency(image) ?? image
+        }
+        #endif
+        return image
+    }
 
     var body: some View {
         VStack(spacing: 8) {
             // Layer thumbnail
-            if let image = layer.image {
+            if let image = displayImage {
                 GeometryReader { geometry in
                     Image(nsImage: image)
                         .resizable()

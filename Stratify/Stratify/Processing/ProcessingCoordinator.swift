@@ -77,8 +77,7 @@ class ProcessingCoordinator {
                 name: "Layer \(i + 1)",
                 cgImage: layerCGImage,
                 pixelCount: pixelCount,
-                averageColor: avgColor,
-                isSelected: true
+                averageColor: avgColor
             )
 
             layers.append(layer)
@@ -119,7 +118,7 @@ class ProcessingCoordinator {
     }
 
     /// Convert sRGB (0-1 range) to CIE LAB color space
-    static func rgbToLab(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> {
+    nonisolated static func rgbToLab(_ r: Float, _ g: Float, _ b: Float) -> SIMD3<Float> {
         // Convert sRGB to linear RGB
         func srgbToLinear(_ c: Float) -> Float {
             if c <= 0.04045 {

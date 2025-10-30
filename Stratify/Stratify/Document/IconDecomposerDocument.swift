@@ -208,8 +208,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
             pixelWidth: width,
             pixelHeight: height,
             pixelCount: source.pixelCount + target.pixelCount,
-            averageColor: target.averageColor,
-            isSelected: true
+            averageColor: target.averageColor
         )
 
         // Remove both source and target, add combined
@@ -277,8 +276,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
             pixelWidth: width,
             pixelHeight: height,
             pixelCount: totalPixelCount,
-            averageColor: firstLayer.averageColor,
-            isSelected: true
+            averageColor: firstLayer.averageColor
         )
 
         // Remove all selected layers, add combined
@@ -301,8 +299,14 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
             throw ProcessingError.processingFailed("Layer not found")
         }
 
+        print("============================================================")
+        print("🔪 STARTING SPLIT LAYER")
+        print("  Source layer: '\(layer.name)'")
+        print("  Source pixels: \(layer.pixelCount) px")
+        print("  Source LAB color: \(layer.averageColor)")
+        print("============================================================")
+
         let oldLayers = self.layers
-        let processingParams = self.parameters
 
         let width = Int(image.size.width)
         let height = Int(image.size.height)
@@ -318,27 +322,11 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
             throw ProcessingError.metalNotAvailable
         }
 
-        // Step 1: Run SLIC segmentation
-        let slicProcessor = try SLICProcessor(device: device, library: library)
-
+        // Step 1: Extract visible pixels directly from the layer
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
             throw ProcessingError.processingFailed("Failed to get CGImage")
         }
 
-        // Create texture from image
-        let textureDescriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: .bgra8Unorm,
-            width: width,
-            height: height,
-            mipmapped: false
-        )
-        textureDescriptor.usage = [.shaderRead, .shaderWrite]
-
-        guard let inputTexture = device.makeTexture(descriptor: textureDescriptor) else {
-            throw ProcessingError.processingFailed("Failed to create texture")
-        }
-
-        // Copy image data to texture
         let bytesPerRow = width * 4
         var imageData = [UInt8](repeating: 0, count: width * height * 4)
         guard let context = CGContext(
@@ -353,65 +341,95 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
             throw ProcessingError.processingFailed("Failed to create context")
         }
 
-        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
-        inputTexture.replace(
-            region: MTLRegionMake2D(0, 0, width, height),
-            mipmapLevel: 0,
-            withBytes: imageData,
-            bytesPerRow: bytesPerRow
-        )
+        let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
 
-        // Run SLIC with split-specific parameters
-        // Use fewer, larger superpixels since layer is sparse (mostly transparent)
-        let slicResult = try slicProcessor.processSLIC(
-            inputTexture: inputTexture,
-            commandQueue: commandQueue,
-            nSegments: 150,              // Fewer segments to concentrate on actual content
-            compactness: 12.0,            // Lower compactness for irregular layer shapes
-            greenAxisScale: processingParams.greenAxisScale,
-            iterations: 10,
-            enforceConnectivity: true
-        )
+        // Composite semi-transparent/transparent pixels over white background
+        // This ensures transparent pixels cluster as white instead of black (matches POC behavior)
+        context.setFillColor(NSColor.white.cgColor)
+        context.fill(fullRect)
+        context.draw(cgImage, in: fullRect)
 
-        // Step 2: Extract superpixel features (color + spatial)
-        let superpixelProcessor = try SuperpixelProcessor(
-            device: device,
-            library: library,
-            commandQueue: commandQueue
-        )
+        // Extract visible pixels (alpha > 10) with their colors and positions
+        let extractStartTime = CFAbsoluteTimeGetCurrent()
 
-        let superpixelData = try superpixelProcessor.extractSuperpixelsMetal(
-            from: slicResult.labBuffer,
-            labelsBuffer: slicResult.labelsBuffer,
-            width: width,
-            height: height
-        )
+        struct VisiblePixel {
+            let index: Int
+            let lab: SIMD3<Float>
+            let position: SIMD2<Float>
+        }
 
-        let superpixelColors = SuperpixelProcessor.extractColorFeatures(from: superpixelData)
-        let superpixelPositions = SuperpixelProcessor.extractSpatialFeatures(
-            from: superpixelData,
-            imageWidth: width,
-            imageHeight: height
-        )
+        var visiblePixels: [VisiblePixel] = []
+        visiblePixels.reserveCapacity(layer.pixelCount)
 
-        // Step 3: Cluster using spatial+color features with fallback strategy
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let alpha = imageData[offset + 3]
+
+                // Only include non-transparent pixels (skip mask artifacts)
+                if alpha > 10 {
+                    // BGRA format
+                    let b = Float(imageData[offset + 0]) / 255.0
+                    let g = Float(imageData[offset + 1]) / 255.0
+                    let r = Float(imageData[offset + 2]) / 255.0
+
+                    var lab = ProcessingCoordinator.rgbToLab(r, g, b)
+
+                    // Apply same color adjustments as SLIC for consistency
+                    lab.x *= self.parameters.lightnessWeight  // Scale L channel
+                    if lab.y < 0.0 {
+                        lab.y *= self.parameters.greenAxisScale  // Scale green axis
+                    }
+
+                    // Normalize spatial coordinates to [0, 1]
+                    let normalizedX = Float(x) / Float(width)
+                    let normalizedY = Float(y) / Float(height)
+
+                    visiblePixels.append(VisiblePixel(
+                        index: y * width + x,
+                        lab: lab,
+                        position: SIMD2<Float>(normalizedX, normalizedY)
+                    ))
+                }
+            }
+        }
+
+        let extractEndTime = CFAbsoluteTimeGetCurrent()
+        let extractDuration = (extractEndTime - extractStartTime) * 1000.0
+        print("  Visible pixels extracted: \(visiblePixels.count) px (alpha > 10)")
+        print("  ⏱️  Pixel extraction time: \(String(format: "%.1f", extractDuration))ms")
+
+        // Guard against too few pixels to split
+        guard visiblePixels.count >= 20 else {
+            throw ProcessingError.processingFailed("Layer has too few visible pixels (\(visiblePixels.count)) to split")
+        }
+
+        // Step 2: Prepare features for K-means (colors + positions)
+        let pixelColors = visiblePixels.map { $0.lab }
+        let pixelPositions = visiblePixels.map { $0.position }
+
+        // Step 3: Cluster visible pixels directly using K-means with spatial+color features
         let kmeansProcessor = try KMeansProcessor(
             device: device,
             library: library,
             commandQueue: commandQueue
         )
 
-        // Try different spatial weights in order: 0.8, 0.5, 0.3
-        let spatialWeights: [Float] = [0.8, 0.5, 0.3]
-        var splitLayers: [Layer]?
+        // Try different spatial weights: 0.3, 0.5, 0.8
+        // Pick the one with largest color difference (most distinct color separation)
+        let spatialWeights: [Float] = [0.3, 0.5, 0.8]
+        var candidateResults: [(weight: Float, layers: [Layer], colorDifference: Float)] = []
         var lastAttemptCount = 0
 
         for spatialWeight in spatialWeights {
             let colorWeight = 1.0 - spatialWeight
 
+            // Run K-means directly on visible pixels (not superpixels)
+            let kmeansStartTime = CFAbsoluteTimeGetCurrent()
+
             let clusteringResult = try kmeansProcessor.clusterWithSpatial(
-                superpixelColors: superpixelColors,
-                superpixelPositions: superpixelPositions,
+                superpixelColors: pixelColors,
+                superpixelPositions: pixelPositions,
                 numberOfClusters: 2,
                 colorWeight: colorWeight,
                 spatialWeight: spatialWeight,
@@ -419,17 +437,24 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
                 convergenceDistance: 0.01
             )
 
-            // Step 4: Map cluster assignments to pixels
-            let labelsPointer = slicResult.labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: width * height)
-            let labelMap = Array(UnsafeBufferPointer(start: labelsPointer, count: width * height))
+            let kmeansEndTime = CFAbsoluteTimeGetCurrent()
+            let kmeansDuration = (kmeansEndTime - kmeansStartTime) * 1000.0
+            print("  ⏱️  K-means (weight=\(spatialWeight)): \(String(format: "%.1f", kmeansDuration))ms")
 
-            let pixelClusters = LayerExtractor.mapClustersToPixels(
-                clusterAssignments: clusteringResult.clusterAssignments,
-                superpixelData: superpixelData,
-                labelMap: labelMap
-            )
+            // Step 4: Map cluster assignments back to full image
+            // Initialize all pixels as transparent (cluster assignment doesn't matter)
+            var pixelClusters = [UInt32](repeating: 0, count: width * height)
+
+            // Assign clusters only for visible pixels
+            for (pixelIndex, visiblePixel) in visiblePixels.enumerated() {
+                let clusterAssignment = clusteringResult.clusterAssignments[pixelIndex]
+                let clusterId = clusterAssignment >= 0 ? UInt32(clusterAssignment) : 0
+                pixelClusters[visiblePixel.index] = clusterId
+            }
 
             // Step 5: Extract layers
+            let extractLayersStartTime = CFAbsoluteTimeGetCurrent()
+
             guard let originalImageBuffer = device.makeBuffer(
                 bytes: imageData,
                 length: width * height * 4,
@@ -452,6 +477,10 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
                 height: height
             )
 
+            let extractLayersEndTime = CFAbsoluteTimeGetCurrent()
+            let extractLayersDuration = (extractLayersEndTime - extractLayersStartTime) * 1000.0
+            print("  ⏱️  Layer extraction (GPU): \(String(format: "%.1f", extractLayersDuration))ms")
+
             // Step 6: Create Layer objects on main actor
             let attemptLayers = await MainActor.run { () -> [Layer] in
                 var layers: [Layer] = []
@@ -470,8 +499,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
                         name: "\(layer.name) - Part \(i + 1)",
                         cgImage: layerCGImage,
                         pixelCount: pixelCount,
-                        averageColor: avgColor,
-                        isSelected: false
+                        averageColor: avgColor
                     ))
                 }
 
@@ -480,17 +508,30 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
             lastAttemptCount = attemptLayers.count
 
-            // If we got exactly 2 layers, success!
+            // If we got exactly 2 layers, calculate color difference and store as candidate
             if attemptLayers.count == 2 {
-                splitLayers = attemptLayers
-                break
+                let colorDifference = labDistance(attemptLayers[0].averageColor, attemptLayers[1].averageColor)
+                candidateResults.append((weight: spatialWeight, layers: attemptLayers, colorDifference: colorDifference))
+
+                // Debug output
+                print("🔍 SPLIT DEBUG - Spatial weight: \(spatialWeight)")
+                print("  Layer 1: \(attemptLayers[0].pixelCount) px, LAB: \(attemptLayers[0].averageColor)")
+                print("  Layer 2: \(attemptLayers[1].pixelCount) px, LAB: \(attemptLayers[1].averageColor)")
+                print("  Color distance: \(colorDifference)")
+            } else {
+                print("🔍 SPLIT DEBUG - Spatial weight: \(spatialWeight) - FAILED (produced \(attemptLayers.count) layers)")
             }
         }
 
-        // Verify we got exactly 2 non-empty layers after all attempts
-        guard let splitLayers = splitLayers else {
+        // Pick the candidate with largest color difference (most distinct colors)
+        // This ensures we separate different color regions rather than splitting uniform areas
+        guard let bestResult = candidateResults.max(by: { $0.colorDifference < $1.colorDifference }) else {
             throw ProcessingError.processingFailed("Split produced \(lastAttemptCount) layers instead of 2 after trying multiple strategies. The layer may not be splittable.")
         }
+
+        print("✅ SPLIT SELECTED - Spatial weight: \(bestResult.weight), Color distance: \(bestResult.colorDifference)")
+
+        let splitLayers = bestResult.layers
 
         await MainActor.run {
             // Remove original layer and add split layers
@@ -508,6 +549,12 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
     }
 
     // MARK: - Private Methods
+
+    /// Calculate Euclidean distance between two LAB colors
+    private func labDistance(_ color1: SIMD3<Float>, _ color2: SIMD3<Float>) -> Float {
+        let diff = color1 - color2
+        return sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z)
+    }
 
     /// Auto-group layers into ≤4 groups for .icon export
     private func autoGroupLayers(_ layers: [Layer]) -> [LayerGroup] {

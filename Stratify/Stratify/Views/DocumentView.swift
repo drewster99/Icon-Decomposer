@@ -18,6 +18,7 @@ struct DocumentView: View {
     @State private var selectedLayerIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var showingError = false
+    @State private var debugTransparency = false
 
     var body: some View {
         HSplitView {
@@ -136,7 +137,8 @@ struct DocumentView: View {
                                 },
                                 onDrop: { source, target in
                                     combineLayers(source: source, target: target)
-                                }
+                                },
+                                debugTransparency: debugTransparency
                             )
                             .layoutPriority(1)
 
@@ -167,6 +169,19 @@ struct DocumentView: View {
                                     splitSelectedLayer()
                                 }
                                 .disabled(selectedLayerIDs.count != 1)
+
+                                #if DEBUG
+                                Button(debugTransparency ? "Hide Transparency" : "Show Transparency") {
+                                    debugTransparency.toggle()
+                                }
+                                .help("Debug: Show fully transparent pixels as green, partial transparency as opaque")
+
+                                Button("Print Pixels") {
+                                    printSelectedLayerPixels()
+                                }
+                                .disabled(selectedLayerIDs.count != 1)
+                                .help("Debug: Print RGBA values for selected layer")
+                                #endif
 
                                 Spacer()
                                 
@@ -411,8 +426,7 @@ struct DocumentView: View {
                     pixelWidth: width,
                     pixelHeight: height,
                     pixelCount: layer1.pixelCount + layer2.pixelCount,
-                    averageColor: layer1.averageColor,  // Use larger layer's color
-                    isSelected: false
+                    averageColor: layer1.averageColor  // Use larger layer's color
                 )
 
                 // Remove both layers and add merged layer
@@ -555,6 +569,83 @@ struct DocumentView: View {
 
     // MARK: - Helpers
 
+    #if DEBUG
+    private func printSelectedLayerPixels() {
+        guard let selectedID = selectedLayerIDs.first,
+              let layer = document.layers.first(where: { $0.id == selectedID }),
+              let image = layer.image,
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            print("❌ Could not get layer image")
+            return
+        }
+
+        let width = cgImage.width
+        let height = cgImage.height
+        let totalPixels = width * height
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            print("❌ Could not create context")
+            return
+        }
+
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        guard let data = context.data else {
+            print("❌ Could not get pixel data")
+            return
+        }
+
+        let pixels = data.bindMemory(to: UInt8.self, capacity: totalPixels * 4)
+
+        // Analyze alpha distribution
+        var alphaHistogram: [UInt8: Int] = [:]
+        var nonZeroAlphaPixels: [(x: Int, y: Int, r: UInt8, g: UInt8, b: UInt8, a: UInt8)] = []
+
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let r = pixels[offset]
+                let g = pixels[offset + 1]
+                let b = pixels[offset + 2]
+                let a = pixels[offset + 3]
+
+                alphaHistogram[a, default: 0] += 1
+
+                if a > 0 && nonZeroAlphaPixels.count < 20 {
+                    nonZeroAlphaPixels.append((x, y, r, g, b, a))
+                }
+            }
+        }
+
+        print("============================================================")
+        print("🔍 PIXEL ANALYSIS: '\(layer.name)'")
+        print("  Dimensions: \(width)×\(height) = \(totalPixels) total pixels")
+        print("  Layer reports: \(layer.pixelCount) non-transparent pixels")
+        print("")
+        print("📊 ALPHA HISTOGRAM:")
+        let sortedAlpha = alphaHistogram.keys.sorted()
+        for alpha in sortedAlpha {
+            // swiftlint:disable:next force_unwrapping
+            let count = alphaHistogram[alpha]!
+            let percentage = Double(count) / Double(totalPixels) * 100.0
+            print("  Alpha \(String(format: "%3d", alpha)): \(String(format: "%7d", count)) pixels (\(String(format: "%5.2f", percentage))%)")
+        }
+        print("")
+        print("📝 SAMPLE NON-TRANSPARENT PIXELS (first 20):")
+        for sample in nonZeroAlphaPixels {
+            print("  [\(sample.x), \(sample.y)]: R=\(sample.r) G=\(sample.g) B=\(sample.b) A=\(sample.a)")
+        }
+        print("============================================================")
+    }
+    #endif
+
     private func createDummyLayers(from image: NSImage) -> [Layer] {
         // Temporary placeholder until we integrate processing
         guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
@@ -566,6 +657,62 @@ struct DocumentView: View {
             Layer(name: "Layer 3", cgImage: cgImage, pixelCount: 250000, averageColor: SIMD3<Float>(30, -5, 15))
         ]
     }
+
+    #if DEBUG
+    /// Transform layer image to visualize transparency:
+    /// - Fully transparent pixels (alpha = 0) → green with 0.5 alpha
+    /// - Partially transparent pixels → make fully opaque
+    static func debugVisualizeTransparency(_ image: NSImage?) -> NSImage? {
+        guard let image = image,
+              let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            return image
+        }
+
+        let width = cgImage.width
+        let height = cgImage.height
+
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return image
+        }
+
+        // Draw original image
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // Get pixel data
+        guard let data = context.data else { return image }
+        let pixels = data.bindMemory(to: UInt8.self, capacity: width * height * 4)
+
+        // Transform pixels
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let a = pixels[offset + 3]
+
+                if a == 0 {
+                    // Fully transparent → green with 0.5 alpha
+                    pixels[offset] = 0      // R
+                    pixels[offset + 1] = 255  // G
+                    pixels[offset + 2] = 0    // B
+                    pixels[offset + 3] = 128  // A (0.5)
+                } else if a < 255 {
+                    // Partially transparent → make fully opaque
+                    pixels[offset + 3] = 255
+                }
+            }
+        }
+
+        guard let outputCGImage = context.makeImage() else { return image }
+        return NSImage(cgImage: outputCGImage, size: NSSize(width: width, height: height))
+    }
+    #endif
 }
 
 #Preview {

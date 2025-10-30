@@ -1,6 +1,6 @@
 //
 //  ReviewRequestManager.swift
-//  FunVoice
+//  Stratify
 //
 //  Manages app store review requests with rate limiting
 //
@@ -14,7 +14,7 @@ import UIKit
 
 final class ReviewRequestManager {
     static let shared = ReviewRequestManager()
-    private static let logger = Logger(subsystem: "FunVoice", category: "ReviewRequestManager")
+    private static let logger = Logger(subsystem: "Stratify", category: "ReviewRequestManager")
 
     private let lastReviewRequestDateKey = "lastReviewRequestDate"
     private let hasLaunchedMainViewKey = "hasLaunchedMainView"

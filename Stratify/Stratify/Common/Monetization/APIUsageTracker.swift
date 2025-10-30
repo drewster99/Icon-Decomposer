@@ -1,6 +1,6 @@
 //
 //  APIUsageTracker.swift
-//  FunVoice
+//  Stratify
 //
 //  Created by Andrew Benson on 10/16/25.
 //
@@ -77,20 +77,20 @@ final class APIUsageTracker: ObservableObject {
         case 0:
             // First day - the day the app was first run
             if usageToday >= 5 {
-                return (false, "You've reached your limit of 5 free recordingsfor today. Upgrade for unlimited recording, reversing and fun voice effects!")
+                return (false, "You've reached your limit of 5 free icon layer exports for today. Upgrade for unlimited exports!")
             }
             return (true, nil)
 
         case 1, 2:
             // Days 2 and 3
             if usageToday >= 2 {
-                return (false, "You've reached your limit of 2 free recordings for today. Upgrade for unlimited recording, reversing and awesome voice effects!")
+                return (false, "You've reached your limit of 2 free icon layer exports for today. Upgrade for unlimited exports!")
             }
             return (true, nil)
 
         default:
             // Day 3+: No free identifications
-            return (false, "Your free trial has ended. Upgrade for unlimited recordings, reversing and cool voice effects!")
+            return (false, "Your free trial has ended. Upgrade for unlimited icon layer exports!")
         }
     }
 

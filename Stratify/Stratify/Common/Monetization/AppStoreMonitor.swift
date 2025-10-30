@@ -1,6 +1,6 @@
 //
 //  AppStoreMonitor.swift
-//  PhotoCalorie
+//  Stratify
 //
 //  Created by Andrew Benson on 2/16/25.
 //  Copyright © 2025 Nuclear Cyborg. All rights reserved.
@@ -58,8 +58,8 @@ public struct AppStoreConfiguration {
         basicProductIDs + proProductIDs + maxProductIDs
     }
     
-    /// If present, this is the RevenueCat API key
-    public static let revenueCatAPIKey: String = "appl_xSlfqRZrjDKFeEQhDmgyrojuRvw"
+    /// If present, this is the RevenueCat API key - STRATIFY APP
+    public static let revenueCatAPIKey: String = "appl_teapMlIuXiPvXPKhTfsEpnAnvMV"
     // MARK: - END OF PER APP CONFIGURATION
 }
 

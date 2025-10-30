@@ -1,6 +1,6 @@
 //
 //  SceneDelegate.swift
-//  PhotoCalorieCam
+//  Stratify
 //
 //  Created by Andrew Benson on 5/25/25.
 //
@@ -12,7 +12,7 @@ import Combine
 import OSLog
 
 final class SceneDelegate: NSObject, ObservableObject, UIWindowSceneDelegate {
-    private let logger = Logger(subsystem: "FunVoice", category: "SceneDelegate")
+    private let logger = Logger(subsystem: "Stratify", category: "SceneDelegate")
 
     var window: UIWindow?
 

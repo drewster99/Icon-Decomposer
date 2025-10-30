@@ -564,12 +564,13 @@ struct DocumentView: View {
             return
         }
 
-        let success = AIAnalysisExporter.exportForAIAnalysis(
+        let result = AIAnalysisExporter.exportForAIAnalysis(
             sourceImage: sourceImage,
             layers: document.layers
         )
 
-        if success {
+        switch result {
+        case .success:
             // Show success notification
             let alert = NSAlert()
             alert.messageText = "AI Analysis Export Successful"
@@ -577,11 +578,16 @@ struct DocumentView: View {
             alert.alertStyle = .informational
             alert.addButton(withTitle: "OK")
             alert.runModal()
-        } else {
+
+        case .cancelled:
+            // User cancelled - no alert needed
+            break
+
+        case .failed(let error):
             // Show error alert
             let alert = NSAlert()
             alert.messageText = "Export Failed"
-            alert.informativeText = "Failed to create AI analysis export"
+            alert.informativeText = error.localizedDescription
             alert.alertStyle = .critical
             alert.addButton(withTitle: "OK")
             alert.runModal()

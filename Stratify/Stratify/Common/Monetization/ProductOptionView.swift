@@ -1,6 +1,6 @@
 //
 //  ProductOptionView.swift
-//  Pricing
+//  Stratify
 //
 //  Created by Andrew Benson on 3/2/25.
 //  Copyright © 2025 Nuclear Cyborg. All rights reserved.

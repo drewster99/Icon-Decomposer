@@ -1,6 +1,6 @@
 //
 //  AnalyticsManager.swift
-//  PhotoCalorie
+//  Stratify
 //
 //   Created by Andrew Benson on 3/1/24.
 //

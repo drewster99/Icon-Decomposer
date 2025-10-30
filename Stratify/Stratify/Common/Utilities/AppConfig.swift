@@ -1,6 +1,6 @@
 //
 //  AppConfig.swift
-//  FunVoice
+//  Stratify
 //
 //  Created by Andrew Benson on 10/14/25.
 //

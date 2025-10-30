@@ -1,6 +1,6 @@
 //
 //  UserAccountProperties.swift
-//  PhotoCalorie
+//  Stratify
 //
 //  Created by Andrew Benson on 5/2/25.
 //
@@ -142,7 +142,13 @@ extension Date {
         let a = calendar.dateComponents([.day], from: date1, to: date2)
 
         guard let daysDifference = a.value(for: .day) else {
-            fatalError("Failed to calculate days between dates in UserAccountProperties.calendarDaysBetween")
+            let logger = Logger(subsystem: "User", category: "UserAccountProperties")
+            logger.fault("Calendar day calculation failed, falling back to time-based calculation")
+            logger.fault("start: \(date1), end: \(date2)")
+            // Fallback: calculate using time interval (less precise but safe)
+            let timeInterval = date2.timeIntervalSince(date1)
+            let approxDays = Int(timeInterval / 86400) // seconds per day
+            return approxDays
         }
         return daysDifference
     }

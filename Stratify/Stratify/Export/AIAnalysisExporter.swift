@@ -11,14 +11,20 @@ import UniformTypeIdentifiers
 
 struct AIAnalysisExporter {
 
+    enum ExportResult {
+        case success
+        case cancelled
+        case failed(Error)
+    }
+
     /// Export a vertical strip showing source image and all layers for AI analysis
     /// - Parameters:
     ///   - sourceImage: Original source icon image
     ///   - layers: Array of layers to include
-    /// - Returns: Success/failure of the export operation
-    static func exportForAIAnalysis(sourceImage: NSImage, layers: [Layer]) -> Bool {
+    /// - Returns: Result of the export operation (success, cancelled, or failed)
+    static func exportForAIAnalysis(sourceImage: NSImage, layers: [Layer]) -> ExportResult {
         guard !layers.isEmpty else {
-            return false
+            return .failed(NSError(domain: "AIAnalysisExporter", code: 1, userInfo: [NSLocalizedDescriptionKey: "No layers to export"]))
         }
 
         // Generate unique 2-letter codes for each layer
@@ -158,22 +164,22 @@ struct AIAnalysisExporter {
         savePanel.message = "Save diagnostic image for AI layer analysis"
 
         guard savePanel.runModal() == .OK, let url = savePanel.url else {
-            return false
+            return .cancelled
         }
 
         // Convert to JPEG and save
         guard let tiffData = stripImage.tiffRepresentation,
               let bitmapImage = NSBitmapImageRep(data: tiffData),
               let jpegData = bitmapImage.representation(using: .jpeg, properties: [.compressionFactor: 0.75]) else {
-            return false
+            return .failed(NSError(domain: "AIAnalysisExporter", code: 2, userInfo: [NSLocalizedDescriptionKey: "Failed to convert image to JPEG format"]))
         }
 
         do {
             try jpegData.write(to: url)
-            return true
+            return .success
         } catch {
             print("Failed to save AI analysis export: \(error)")
-            return false
+            return .failed(error)
         }
     }
 

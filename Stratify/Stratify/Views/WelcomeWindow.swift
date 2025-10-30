@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 struct WelcomeWindow: View {
     private static let fontFamily = "Didot"
     var onGetStarted: () -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(spacing: 30) {
@@ -119,11 +120,9 @@ struct WelcomeWindow: View {
 
     private func getStarted() {
         // Close the welcome window
-        if let window = NSApplication.shared.windows.first(where: { $0.title == "Welcome to Stratify" }) {
-            window.close()
-        }
+        dismiss()
 
-        // Call the callback to switch scenes and create new document
+        // Call the callback to create new document
         onGetStarted()
     }
 

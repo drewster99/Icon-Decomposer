@@ -88,7 +88,15 @@ final class PurchaseModel: ObservableObject {
                     durationPlanName = "\(duration)"
                     annualCost =  (product.price as NSDecimalNumber).doubleValue  /  Double(sub.subscriptionPeriod.value)
                 @unknown default:
-                    fatalError()
+                    let descr = sub.subscriptionPeriod.unit.debugDescription
+#if DEBUG
+                    fatalError("Unknown subscription period unit: \(descr)")
+#else
+                    logger.fault("Unknown subscription period unit encountered: \(descr)")
+                    duration = "Unknown Period"
+                    durationPlanName = "Unknown Period"
+                    annualCost = (product.price as NSDecimalNumber).doubleValue
+#endif
                 }
             }
         } else {

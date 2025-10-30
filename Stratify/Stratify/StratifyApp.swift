@@ -188,6 +188,14 @@ struct StratifyApp: App {
             })
         }
         .handlesExternalEvents(matching: ["welcome"])
+
+        // Original icon viewer window
+        WindowGroup(id: "original-icon") {
+            OriginalIconWindow()
+                .environmentObject(OriginalIconStore.shared)
+        }
+        .defaultSize(width: 512, height: 512)
+        .windowResizability(.contentSize)
     }
 }
 

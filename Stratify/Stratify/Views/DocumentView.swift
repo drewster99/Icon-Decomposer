@@ -12,12 +12,12 @@ import ImageColorSegmentation
 struct DocumentView: View {
     @ObservedObject var document: StratifyDocument
     @Environment(\.undoManager) var undoManager
+    @Environment(\.openWindow) private var openWindow
 
     @State private var isProcessing = false
     @State private var selectedLayerIDs = Set<UUID>()
     @State private var errorMessage: String?
     @State private var showingError = false
-    @State private var imageWindowObservers: [(window: NSWindow, observer: NSObjectProtocol)] = []
 
     var body: some View {
         HSplitView {
@@ -300,53 +300,12 @@ struct DocumentView: View {
     }
 
     private func openIconInWindow(_ image: NSImage) {
-        // Check if we already have an "Original Icon" window open
-        if let existing = imageWindowObservers.first(where: { $0.window.title == "Original Icon" && $0.window.isVisible }) {
-            existing.window.makeKeyAndOrderFront(nil)
-            return
-        }
-
-        // Create independent copy to prevent reference issues
+        // Create independent copy to ensure window has its own reference
         guard let imageCopy = image.copy() as? NSImage else { return }
 
-        let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 512, height: 512),
-            styleMask: [.titled, .closable, .resizable],
-            backing: .buffered,
-            defer: false
-        )
-        window.title = "Original Icon"
-        window.animationBehavior = .none  // Disable close animation to prevent crash
-        window.contentView = NSHostingView(rootView:
-            Image(nsImage: imageCopy)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .background(CheckerboardBackground())
-        )
-        window.center()
-        window.makeKeyAndOrderFront(nil)
-
-        // Set up cleanup on close
-        let observer = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: window,
-            queue: .main,
-            using: { [weak window] _ in
-                print("🔍 Window close notification received")
-
-                guard let window = window else {
-                    print("⚠️ Window was deallocated")
-                    return
-                }
-
-                print("📊 Removing window and observer from array (current count: \(self.imageWindowObservers.count))")
-                self.imageWindowObservers.removeAll { $0.window == window }
-                print("✅ Window and observer removed (new count: \(self.imageWindowObservers.count))")
-            }
-        )
-
-        // Retain the window and observer together
-        imageWindowObservers.append((window: window, observer: observer))
+        // Store the image and open the window
+        OriginalIconStore.shared.currentImage = imageCopy
+        openWindow(id: "original-icon")
     }
 
     @MainActor

@@ -29,6 +29,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
     required init(configuration: ReadConfiguration) throws {
         self.sourceImage = nil
+        self.depthMap = nil
         self.parameters = ProcessingParameters.default
         self.layers = []
         self.layerGroups = []
@@ -41,6 +42,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
                 let archive = try decoder.decode(DocumentArchive.self, from: data)
 
                 self.sourceImage = archive.sourceImage
+                self.depthMap = archive.depthMap
                 self.parameters = archive.parameters
                 self.layers = archive.layers
                 self.layerGroups = archive.layerGroups
@@ -66,6 +68,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
         return DocumentArchive(
             sourceImage: sourceImage,
+            depthMap: depthMap,
             parameters: parameters,
             layers: layers,
             layerGroups: layerGroups
@@ -87,6 +90,9 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
     /// Original source image
     @Published var sourceImage: NSImage?
+
+    /// Depth map computed from source image (cached)
+    @Published var depthMap: NSImage?
 
     /// Processing parameters used
     @Published var parameters = ProcessingParameters.default
@@ -111,6 +117,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
     init() {
         self.sourceImage = nil
+        self.depthMap = nil
         self.parameters = ProcessingParameters.default
         self.layers = []
         self.layerGroups = []
@@ -607,6 +614,7 @@ class StratifyDocument: ReferenceFileDocument, ObservableObject {
 
 struct DocumentArchive: @unchecked Sendable {
     let sourceImageData: Data
+    let depthMapData: Data?
     let parameters: ProcessingParameters
     let layers: [Layer]
     let layerGroups: [LayerGroup]
@@ -615,13 +623,27 @@ struct DocumentArchive: @unchecked Sendable {
         return NSImage(data: sourceImageData)
     }
 
-    init(sourceImage: NSImage, parameters: ProcessingParameters, layers: [Layer], layerGroups: [LayerGroup]) {
+    nonisolated var depthMap: NSImage? {
+        guard let depthMapData = depthMapData else { return nil }
+        return NSImage(data: depthMapData)
+    }
+
+    init(sourceImage: NSImage, depthMap: NSImage?, parameters: ProcessingParameters, layers: [Layer], layerGroups: [LayerGroup]) {
         if let tiffData = sourceImage.tiffRepresentation,
            let bitmapImage = NSBitmapImageRep(data: tiffData),
            let pngData = bitmapImage.representation(using: .png, properties: [:]) {
             self.sourceImageData = pngData
         } else {
             self.sourceImageData = Data()
+        }
+
+        if let depthMap = depthMap,
+           let tiffData = depthMap.tiffRepresentation,
+           let bitmapImage = NSBitmapImageRep(data: tiffData),
+           let pngData = bitmapImage.representation(using: .png, properties: [:]) {
+            self.depthMapData = pngData
+        } else {
+            self.depthMapData = nil
         }
 
         self.parameters = parameters
@@ -634,6 +656,7 @@ struct DocumentArchive: @unchecked Sendable {
 extension DocumentArchive: Codable {
     enum CodingKeys: String, CodingKey {
         case sourceImageData
+        case depthMapData
         case parameters
         case layers
         case layerGroups
@@ -642,6 +665,7 @@ extension DocumentArchive: Codable {
     nonisolated init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         sourceImageData = try container.decode(Data.self, forKey: .sourceImageData)
+        depthMapData = try container.decodeIfPresent(Data.self, forKey: .depthMapData)
         parameters = try container.decode(ProcessingParameters.self, forKey: .parameters)
         layers = try container.decode([Layer].self, forKey: .layers)
         layerGroups = try container.decode([LayerGroup].self, forKey: .layerGroups)
@@ -650,6 +674,7 @@ extension DocumentArchive: Codable {
     nonisolated func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(sourceImageData, forKey: .sourceImageData)
+        try container.encodeIfPresent(depthMapData, forKey: .depthMapData)
         try container.encode(parameters, forKey: .parameters)
         try container.encode(layers, forKey: .layers)
         try container.encode(layerGroups, forKey: .layerGroups)

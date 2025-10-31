@@ -211,19 +211,19 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Close any auto-created documents
-        for document in NSDocumentController.shared.documents {
-            document.close()
+        // Give macOS a moment to restore windows, then check what we have
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let hasRestoredDocuments = !NSDocumentController.shared.documents.isEmpty
+
+            // Only show welcome window if no documents were restored
+            if !hasRestoredDocuments && self.shouldShowWelcomeWindow(), let welcomeURL = URL(string: "stratify://welcome") {
+                // Open the welcome window
+                NSWorkspace.shared.open(welcomeURL)
+            }
+
+            // Update last launch date
+            UserDefaults.standard.set(Date(), forKey: "LastLaunchDate")
         }
-        
-        // Check if we should show welcome window (first launch or 60+ days)
-        if shouldShowWelcomeWindow(), let welcomeURL = URL(string: "stratify://welcome") {
-            // Open the welcome window
-            NSWorkspace.shared.open(welcomeURL)
-        }
-        
-        // Update last launch date
-        UserDefaults.standard.set(Date(), forKey: "LastLaunchDate")
     }
     
     func application(_ application: NSApplication, open urls: [URL]) {

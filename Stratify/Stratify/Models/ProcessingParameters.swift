@@ -29,5 +29,8 @@ struct ProcessingParameters: Codable, Equatable, Sendable {
     /// Random seed for K-means clustering (ensures reproducible results)
     var clusteringSeed: Int? = 8675309
 
+    /// Depth weight for SLIC superpixel segmentation (0.0 = ignore depth, 1.0 = full weight)
+    var depthWeightSLIC: Float = 0.0
+
     static let `default` = ProcessingParameters()
 }

@@ -20,6 +20,10 @@ struct DocumentView: View {
     @State private var showingError = false
     @State private var debugTransparency = false
 
+    #if DEBUG
+    @State private var useDepthForProcessing = false
+    #endif
+
     var body: some View {
         HSplitView {
             // Left: Original image preview
@@ -31,7 +35,76 @@ struct DocumentView: View {
                     .padding(.top)
 
                 if let sourceImage = document.sourceImage {
-                    // Perfect square container
+                    #if DEBUG
+                    // Show both original and depth map vertically
+                    VStack(spacing: 16) {
+                        // Original image
+                        VStack(spacing: 8) {
+                            Text("Original")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+
+                            Image(nsImage: sourceImage)
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(maxWidth: 480, maxHeight: 480)
+                                .background(CheckerboardBackground())
+                                .border(Color.secondary.opacity(0.3))
+                                .onTapGesture(count: 2) {
+                                    openIconInWindow(sourceImage)
+                                }
+                                .help("Double-click to view at full size")
+
+                            Text("Double-click to enlarge")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+
+                        // Depth map
+                        VStack(spacing: 8) {
+                            Text("Depth Map")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+
+                            if let depthMap = document.depthMap {
+                                Image(nsImage: depthMap)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxWidth: 480, maxHeight: 480)
+                                    .border(Color.secondary.opacity(0.3))
+                                    .onTapGesture(count: 2) {
+                                        openIconInWindow(depthMap)
+                                    }
+                                    .help("Double-click to view at full size")
+                            } else {
+                                Rectangle()
+                                    .fill(Color.gray.opacity(0.1))
+                                    .frame(maxWidth: 480, maxHeight: 480)
+                                    .overlay(
+                                        Text("Computing...")
+                                            .foregroundColor(.secondary)
+                                    )
+                            }
+
+                            Text("Closer = Brighter")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                    .padding()
+
+                    // Toggle for using depth map
+                    Toggle("Use Depth Map for Processing", isOn: $useDepthForProcessing)
+                        .padding(.horizontal)
+                        .help("When enabled, uses depth map instead of original image for layer extraction")
+                        .onChange(of: useDepthForProcessing) { _, _ in
+                            // Clear layers when toggling to force reprocessing
+                            if !document.layers.isEmpty {
+                                document.updateLayers([], actionName: "Clear Layers")
+                            }
+                        }
+                    #else
+                    // Release mode: just show original
                     GeometryReader { geometry in
                         let size = min(min(geometry.size.width, geometry.size.height), 512)
 
@@ -61,6 +134,7 @@ struct DocumentView: View {
                         }
                     }
                     .frame(minWidth: 256, maxWidth: 512)
+                    #endif
 
                     // Parameters section
                     VStack(alignment: .leading, spacing: 12) {
@@ -84,6 +158,23 @@ struct DocumentView: View {
                                     .font(.caption)
                                     .frame(width: 25, alignment: .trailing)
                             }
+
+                            #if DEBUG
+                            HStack {
+                                Text("Depth weight:")
+                                    .font(.caption)
+                                    .frame(width: 100, alignment: .leading)
+
+                                Slider(value: $document.parameters.depthWeightSLIC, in: 0...1, step: 0.05)
+                                .frame(maxWidth: 150)
+                                .disabled(document.depthMap == nil)
+
+                                Text(String(format: "%.2f", document.parameters.depthWeightSLIC))
+                                    .font(.caption)
+                                    .frame(width: 25, alignment: .trailing)
+                            }
+                            .help("Weight of depth data in SLIC segmentation (0 = ignore, 1 = full weight)")
+                            #endif
 
                             Button("Re-analyze") {
                                 analyzeIcon()
@@ -181,6 +272,12 @@ struct DocumentView: View {
                                 }
                                 .disabled(selectedLayerIDs.count != 1)
                                 .help("Debug: Print RGBA values for selected layer")
+
+                                Button("Test Depth") {
+                                    testDepthEstimation()
+                                }
+                                .disabled(document.sourceImage == nil)
+                                .help("Debug: Estimate depth from source image")
                                 #endif
 
                                 Spacer()
@@ -251,9 +348,21 @@ struct DocumentView: View {
             if let pendingImage = WelcomeWindow.pendingImage {
                 WelcomeWindow.pendingImage = nil  // Clear it
                 document.setSourceImage(pendingImage, actionName: "Import Icon")
+                #if DEBUG
+                computeDepthMap()
+                #endif
                 analyzeIcon()
             }
         }
+        #if DEBUG
+        .onChange(of: document.sourceImage) { _, newImage in
+            if newImage != nil {
+                computeDepthMap()
+            } else {
+                document.depthMap = nil
+            }
+        }
+        #endif
         .alert("Split Layer Error", isPresented: $showingError) {
             Button("OK", role: .cancel) { }
         } message: {
@@ -279,14 +388,25 @@ struct DocumentView: View {
     }
 
     private func analyzeIcon() {
-        guard let sourceImage = document.sourceImage else { return }
+        #if DEBUG
+        let imageToProcess: NSImage?
+        if useDepthForProcessing, let depthMap = document.depthMap {
+            imageToProcess = depthMap
+            print("🧪 Processing using DEPTH MAP instead of original image")
+        } else {
+            imageToProcess = document.sourceImage
+        }
+        guard let imageToProcess = imageToProcess else { return }
+        #else
+        guard let imageToProcess = document.sourceImage else { return }
+        #endif
 
         isProcessing = true
 
         Task {
             do {
                 let layers = try await ProcessingCoordinator.processIcon(
-                    sourceImage,
+                    imageToProcess,
                     parameters: document.parameters
                 )
 
@@ -298,7 +418,7 @@ struct DocumentView: View {
                 await MainActor.run {
                     print("Processing error: \(error)")
                     // For now, use dummy layers until package is integrated
-                    let dummyLayers = createDummyLayers(from: sourceImage)
+                    let dummyLayers = createDummyLayers(from: imageToProcess)
                     document.updateLayers(dummyLayers, actionName: "Analyze Icon")
                     isProcessing = false
                 }
@@ -643,6 +763,69 @@ struct DocumentView: View {
             print("  [\(sample.x), \(sample.y)]: R=\(sample.r) G=\(sample.g) B=\(sample.b) A=\(sample.a)")
         }
         print("============================================================")
+    }
+
+    private func computeDepthMap() {
+        guard let sourceImage = document.sourceImage else {
+            return
+        }
+
+        Task {
+            do {
+                let estimator = try DepthEstimator()
+                let startTime = CFAbsoluteTimeGetCurrent()
+                let depth = try estimator.estimateDepth(from: sourceImage)
+                let duration = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+
+                print("🧪 Depth map computed in \(String(format: "%.1f", duration))ms")
+
+                await MainActor.run {
+                    self.document.depthMap = depth
+                }
+            } catch {
+                print("❌ Depth computation failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func testDepthEstimation() {
+        guard let sourceImage = document.sourceImage else {
+            return
+        }
+
+        print("============================================================")
+        print("🧪 TESTING DEPTH ESTIMATION")
+        print("  Source image: \(sourceImage.size.width)×\(sourceImage.size.height)")
+
+        Task {
+            do {
+                let estimator = try DepthEstimator()
+                let startTime = CFAbsoluteTimeGetCurrent()
+                let depthResult = try estimator.estimateDepthValues(from: sourceImage)
+                let duration = (CFAbsoluteTimeGetCurrent() - startTime) * 1000.0
+
+                // Analyze depth value range
+                let minDepth = depthResult.depths.min() ?? 0
+                let maxDepth = depthResult.depths.max() ?? 1
+                let avgDepth = depthResult.depths.reduce(0, +) / Float(depthResult.depths.count)
+
+                print("  ✅ Depth estimation completed in \(String(format: "%.1f", duration))ms")
+                print("  Depth map: \(depthResult.width)×\(depthResult.height)")
+                print("  Depth range: \(String(format: "%.4f", minDepth)) to \(String(format: "%.4f", maxDepth))")
+                print("  Average depth: \(String(format: "%.4f", avgDepth))")
+                print("============================================================")
+
+                // Create NSImage for display
+                let depth = try estimator.estimateDepth(from: sourceImage)
+
+                await MainActor.run {
+                    self.document.depthMap = depth
+                }
+            } catch {
+                print("  ❌ Depth estimation failed: \(error.localizedDescription)")
+                print("============================================================")
+            }
+        }
     }
     #endif
 

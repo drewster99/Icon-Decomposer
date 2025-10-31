@@ -1,12 +1,3 @@
-{
-  "images" : [
-    {
-      "filename" : "AppIcon 2.0 Light (Rounded).png",
-      "idiom" : "universal"
-    }
-  ],
-  "info" : {
-    "author" : "xcode",
-    "version" : 1
-  }
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:867ab2df81b2f79061616ec798f368a6e26f951b3c78e85754473ac93e30ca41
+size 177

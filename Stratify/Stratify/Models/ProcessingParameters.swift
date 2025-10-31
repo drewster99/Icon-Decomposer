@@ -1,36 +1,3 @@
-//
-//  ProcessingParameters.swift
-//  Stratify
-//
-//  Processing parameters for icon decomposition
-//
-
-import Foundation
-
-struct ProcessingParameters: Codable, Equatable, Sendable {
-    /// Number of initial clusters before auto-merge
-    var numberOfClusters: Int = 8
-
-    /// SLIC compactness parameter (higher = more compact superpixels)
-    var compactness: Float = 25.0
-
-    /// Number of superpixel segments
-    var numberOfSegments: Int = 1000
-
-    /// Auto-merge threshold for combining similar clusters
-    var autoMergeThreshold: Float = 30.0
-
-    /// Lightness weight for clustering (reduce L channel influence)
-    var lightnessWeight: Float = 0.35
-
-    /// Green axis scale factor (emphasize green separation)
-    var greenAxisScale: Float = 2.0
-
-    /// Random seed for K-means clustering (ensures reproducible results)
-    var clusteringSeed: Int? = 8675309
-
-    /// Depth weight for SLIC superpixel segmentation (0.0 = ignore depth, 1.0 = full weight)
-    var depthWeightSLIC: Float = 0.0
-
-    static let `default` = ProcessingParameters()
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:c107b7ef0801afc16c03a425659b109b1afb972035156db99b149776ddc4be0f
+size 1058

@@ -1,30 +1,3 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-	<key>API_KEY</key>
-	<string>AIzaSyCxafZG85SYdFkDSKImzM4wbJHLOEdDdig</string>
-	<key>GCM_SENDER_ID</key>
-	<string>455279771085</string>
-	<key>PLIST_VERSION</key>
-	<string>1</string>
-	<key>BUNDLE_ID</key>
-	<string>com.nuclearcyborg.stratify</string>
-	<key>PROJECT_ID</key>
-	<string>stratify-9795c</string>
-	<key>STORAGE_BUCKET</key>
-	<string>stratify-9795c.firebasestorage.app</string>
-	<key>IS_ADS_ENABLED</key>
-	<false></false>
-	<key>IS_ANALYTICS_ENABLED</key>
-	<false></false>
-	<key>IS_APPINVITE_ENABLED</key>
-	<true></true>
-	<key>IS_GCM_ENABLED</key>
-	<true></true>
-	<key>IS_SIGNIN_ENABLED</key>
-	<true></true>
-	<key>GOOGLE_APP_ID</key>
-	<string>1:455279771085:ios:d7a8223a50d53120add884</string>
-</dict>
-</plist>
+version https://git-lfs.github.com/spec/v1
+oid sha256:69902fb758b498475fa3ed9ba7107ebfe94452339d10651123b4072f10db54f0
+size 886

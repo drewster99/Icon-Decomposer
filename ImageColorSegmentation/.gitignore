@@ -1,14 +1,3 @@
-# Build artifacts
-.build/
-.swiftpm/
-
-# Xcode
-xcuserdata/
-*.xcodeproj/
-DerivedData/
-
-# Output
-output_layers/
-
-# macOS
-.DS_Store
+version https://git-lfs.github.com/spec/v1
+oid sha256:5d87c386931cee00640124946902a138e0f10d8c39c1277ac0bfae82536779ce
+size 127

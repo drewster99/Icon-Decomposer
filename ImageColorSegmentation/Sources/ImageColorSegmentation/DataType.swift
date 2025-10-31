@@ -1,24 +1,3 @@
-import Foundation
-
-/// Represents the type of data flowing through the pipeline
-public enum DataType: Equatable {
-    case none
-    case rgbaImage
-    case labImage
-    case superpixelFeatures
-    case clusterAssignments
-    case layers
-
-    /// Check if this type can be used as input for another type
-    func canFeedInto(_ other: DataType) -> Bool {
-        switch (self, other) {
-        case (.rgbaImage, .labImage),
-             (.labImage, .superpixelFeatures),
-             (.superpixelFeatures, .clusterAssignments),
-             (.clusterAssignments, .layers):
-            return true
-        default:
-            return false
-        }
-    }
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:9262febd3db59926173609d1e62684e0bf4d90ba7088687aa622f6c67984335b
+size 655

@@ -1,17 +1,3 @@
-//
-//  OriginalIconStore.swift
-//  Stratify
-//
-//  Shared storage for passing image to original icon window
-//
-
-import SwiftUI
-import Combine
-
-class OriginalIconStore: ObservableObject {
-    static let shared = OriginalIconStore()
-
-    @Published var currentImage: NSImage?
-
-    private init() {}
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:247715e00dacfe11560b2e473b5119e1cbe8aab3ea3470972b5a51053e869dfa
+size 298

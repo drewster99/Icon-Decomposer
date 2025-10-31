@@ -1,24 +1,3 @@
-//
-//  ContentView.swift
-//  Stratify
-//
-//  Created by Andrew Benson on 9/28/25.
-//
-
-import SwiftUI
-
-struct ContentView: View {
-    var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
-        }
-        .padding()
-    }
-}
-
-#Preview {
-    ContentView()
-}
+version https://git-lfs.github.com/spec/v1
+oid sha256:72846ada6cb4e703f612a78e89f5c4d155581f5cbd4c456f3a6e02557d55cb76
+size 390

@@ -9,6 +9,7 @@ import Foundation
 import Metal
 import MetalKit
 import CoreGraphics
+import Accelerate
 
 /// Handles SLIC superpixel segmentation using Metal shaders
 public class SLICProcessor {
@@ -58,6 +59,8 @@ public class SLICProcessor {
         compactness: Float,
         greenAxisScale: Float,
         lightnessWeight: Float = 0.35,
+        depthWeight: Float = 0.0,
+        depthBuffer: MTLBuffer? = nil,
         iterations: Int = 10,
         enforceConnectivity: Bool = true
     ) throws -> (labBuffer: MTLBuffer, labelsBuffer: MTLBuffer, alphaBuffer: MTLBuffer, numCenters: Int) {
@@ -96,7 +99,7 @@ public class SLICProcessor {
         // Create buffers
         let labBufferSize = width * height * MemoryLayout<SIMD3<Float>>.size
         guard let labBuffer = device.makeBuffer(length: labBufferSize, options: .storageModeShared) else {
-            throw PipelineError.executionFailed("Failed to create LAB buffer")
+            throw PipelineError.executionFailed("Failed to create OKLAB buffer")
         }
 
         let alphaBufferSize = width * height * MemoryLayout<Float>.size
@@ -125,6 +128,25 @@ public class SLICProcessor {
             throw PipelineError.executionFailed("Failed to create accumulator buffer")
         }
 
+        // Create or use provided depth buffer
+        // IMPORTANT: Always create a depth buffer, even when depthWeight == 0,
+        // because Metal shaders expect a valid buffer (no branching in GPU code)
+        let effectiveDepthBuffer: MTLBuffer
+        if let depthBuffer = depthBuffer {
+            effectiveDepthBuffer = depthBuffer
+        } else {
+            // No depth buffer provided - create dummy buffer filled with mid-depth (0.5)
+            let depthBufferSize = width * height * MemoryLayout<Float>.size
+            guard let buffer = device.makeBuffer(length: depthBufferSize, options: .storageModeShared) else {
+                throw PipelineError.executionFailed("Failed to create dummy depth buffer")
+            }
+            // Initialize to 0.5 (mid-depth) using vDSP for performance
+            let ptr = buffer.contents().bindMemory(to: Float.self, capacity: width * height)
+            var fillValue: Float = 0.5
+            vDSP_vfill(&fillValue, ptr, vDSP_Stride(1), vDSP_Length(width * height))
+            effectiveDepthBuffer = buffer
+        }
+
         // Create params buffer
         var params = SLICParams(
             imageWidth: UInt32(width),
@@ -134,7 +156,8 @@ public class SLICProcessor {
             compactness: compactness,
             spatialWeight: spatialWeight,
             numCenters: UInt32(numCenters),
-            iteration: 0
+            iteration: 0,
+            depthWeight: depthWeight
         )
 
         guard let paramsBuffer = device.makeBuffer(bytes: &params, length: MemoryLayout<SLICParams>.size, options: .storageModeShared) else {
@@ -153,7 +176,7 @@ public class SLICProcessor {
             encoder.endEncoding()
         }
 
-        // Step 2: RGB to LAB conversion
+        // Step 2: RGB to OKLAB conversion
         if let encoder = commandBuffer.makeComputeCommandEncoder() {
             encoder.setComputePipelineState(rgbToLabPipeline)
             encoder.setTexture(blurredTexture, index: 0)
@@ -178,6 +201,7 @@ public class SLICProcessor {
             encoder.setBuffer(labBuffer, offset: 0, index: 0)
             encoder.setBuffer(centersBuffer, offset: 0, index: 1)
             encoder.setBuffer(paramsBuffer, offset: 0, index: 2)
+            encoder.setBuffer(effectiveDepthBuffer, offset: 0, index: 3)
 
             let threadsPerGrid = MTLSize(width: numCenters, height: 1, depth: 1)
             let threadsPerThreadgroup = MTLSize(width: min(numCenters, 256), height: 1, depth: 1)
@@ -208,6 +232,7 @@ public class SLICProcessor {
                 encoder.setBuffer(distancesBuffer, offset: 0, index: 3)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 4)
                 encoder.setBuffer(alphaBuffer, offset: 0, index: 5)
+                encoder.setBuffer(effectiveDepthBuffer, offset: 0, index: 6)
 
                 let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
@@ -235,6 +260,7 @@ public class SLICProcessor {
                 encoder.setBuffer(centersBuffer, offset: 0, index: 2)
                 encoder.setBuffer(accumulatorBuffer, offset: 0, index: 3)
                 encoder.setBuffer(paramsBuffer, offset: 0, index: 4)
+                encoder.setBuffer(effectiveDepthBuffer, offset: 0, index: 5)
 
                 let threadsPerGrid = MTLSize(width: width, height: height, depth: 1)
                 let threadsPerThreadgroup = MTLSize(width: 16, height: 16, depth: 1)
@@ -293,6 +319,7 @@ struct SLICParams {
     let spatialWeight: Float
     let numCenters: UInt32
     let iteration: UInt32
+    let depthWeight: Float
 }
 
 struct ClusterCenter {
@@ -301,6 +328,7 @@ struct ClusterCenter {
     var L: Float
     var a: Float
     var b: Float
+    var depth: Float
 }
 
 struct CenterAccumulator {
@@ -309,5 +337,6 @@ struct CenterAccumulator {
     var sumL: Float
     var sumA: Float
     var sumB: Float
+    var sumDepth: Float
     var count: UInt32
 }

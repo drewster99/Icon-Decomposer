@@ -23,6 +23,7 @@ struct SLICParams {
     float spatialWeight;
     uint numCenters;
     uint iteration;
+    float depthWeight;      // Weight for depth in distance calculation (0 = ignore depth)
 };
 
 // Structure for cluster centers
@@ -32,6 +33,7 @@ struct ClusterCenter {
     float L;
     float a;
     float b;
+    float depth;            // Average depth value for this cluster
 };
 
 // Clear distances buffer to infinity
@@ -97,11 +99,12 @@ kernel void gaussianBlur(texture2d<float, access::read> inTexture [[texture(0)]]
     outTexture.write(sum / totalWeight, gid);
 }
 
-// RGB to LAB color space conversion
+// RGB to OKLAB color space conversion
+// Based on Björn Ottosson's work: https://bottosson.github.io/posts/oklab/
 kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
                      device float3* labBuffer [[buffer(0)]],
                      device float* alphaBuffer [[buffer(1)]],
-                     constant float& greenAxisScale [[buffer(2)]],
+                     constant float& greenAxisScale [[buffer(2)]],  // Not used with OKLAB but kept for compatibility
                      constant float& lightnessWeight [[buffer(3)]],
                      uint2 gid [[thread_position_in_grid]]) {
 
@@ -115,8 +118,11 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
     float4 rgba = rgbTexture.read(gid);
     float3 rgb = rgba.rgb;
 
-    // RGB to XYZ conversion (assuming sRGB)
-    // First, linearize RGB values
+    // OKLAB color space conversion
+    // OKLAB is a perceptually uniform color space by Björn Ottosson
+    // https://bottosson.github.io/posts/oklab/
+
+    // Step 1: RGB to linear RGB (sRGB gamma correction)
     float3 linear;
     for (int i = 0; i < 3; i++) {
         if (rgb[i] <= 0.04045) {
@@ -126,49 +132,43 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
         }
     }
 
-    // RGB to XYZ matrix (sRGB with D65 illuminant)
-    float3x3 rgbToXyz = float3x3(
-        0.4124564, 0.3575761, 0.1804375,
-        0.2126729, 0.7151522, 0.0721750,
-        0.0193339, 0.1191920, 0.9503041
+    // Step 2: Linear RGB to LMS cone space
+    float3x3 rgbToLms = float3x3(
+        0.4122214708, 0.5363325363, 0.0514459929,
+        0.2119034982, 0.6806995451, 0.1073969566,
+        0.0883024619, 0.2817188376, 0.6299787005
     );
 
-    float3 xyz = linear * rgbToXyz * 100.0;
+    float3 lms = linear * rgbToLms;
 
-    // Normalize by D65 illuminant
-    float3 d65 = float3(95.047, 100.000, 108.883);
-    xyz /= d65;
-//    xyz.x /= 95.047;
-//    xyz.y /= 100.000;
-//    xyz.z /= 108.883;
+    // Step 3: Apply cube root to LMS
+    float3 lms_cbrt = float3(
+        pow(lms.x, 1.0 / 3.0),
+        pow(lms.y, 1.0 / 3.0),
+        pow(lms.z, 1.0 / 3.0)
+    );
 
-    // XYZ to LAB conversion
-    float3 f;
-    const float epsilon = 0.008856;
-    const float kappa = 903.3;
+    // Step 4: LMS' to OKLAB
+    float3x3 lmsToOklab = float3x3(
+        0.2104542553,  0.7936177850, -0.0040720468,
+        1.9779984951, -2.4285922050,  0.4505937099,
+        0.0259040371,  0.7827717662, -0.8086757660
+    );
 
-    for (int i = 0; i < 3; i++) {
-        if (xyz[i] > epsilon) {
-            f[i] = pow(xyz[i], 1.0/3.0);
-        } else {
-            f[i] = (kappa * xyz[i] + 16.0) / 116.0;
-        }
-    }
+    float3 oklab = lms_cbrt * lmsToOklab;
 
-    float L = 116.0 * f.y - 16.0;
-    float a = 500.0 * (f.x - f.y);
-    float b = 200.0 * (f.y - f.z);
+    // OKLAB native ranges (perceptually uniform):
+    // L: 0 to 1 (lightness)
+    // a: approximately -0.4 to +0.4 (green-red axis)
+    // b: approximately -0.4 to +0.4 (blue-yellow axis)
 
-    // Apply color adjustments in SLIC (not in K-means)
-    // This ensures adjustments are applied once, consistently across the pipeline
+    // Use native OKLAB ranges without scaling to preserve perceptual uniformity
+    // Depth is also 0-1, so all features are in comparable ranges
+    float L = oklab.x * lightnessWeight;
+    float a = oklab.y;
+    float b = oklab.z;
 
-    // Scale L channel to reduce lightness influence
-    L *= lightnessWeight;
-
-    // Scale negative 'a' values (green axis) to enhance green separation
-    if (a < 0.0) {
-        a *= greenAxisScale;
-    }
+    // Note: greenAxisScale not used with OKLAB - OKLAB is already perceptually uniform
 
     uint index = gid.y * width + gid.x;
     labBuffer[index] = float3(L, a, b);
@@ -179,6 +179,7 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
 kernel void initializeCenters(device const float3* labBuffer [[buffer(0)]],
                               device ClusterCenter* centers [[buffer(1)]],
                               constant SLICParams& params [[buffer(2)]],
+                              device const float* depthBuffer [[buffer(3)]],
                               uint gid [[thread_position_in_grid]]) {
 
     if (gid >= params.numCenters) {
@@ -233,6 +234,9 @@ kernel void initializeCenters(device const float3* labBuffer [[buffer(0)]],
     centers[gid].L = lab.x;
     centers[gid].a = lab.y;
     centers[gid].b = lab.z;
+
+    // Initialize depth from buffer (always valid - dummy buffer used when depth not needed)
+    centers[gid].depth = depthBuffer[index];
 }
 
 // Assign pixels to nearest cluster center
@@ -242,6 +246,7 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
                          device atomic_float* distances [[buffer(3)]],
                          constant SLICParams& params [[buffer(4)]],
                          device const float* alphaBuffer [[buffer(5)]],
+                         device const float* depthBuffer [[buffer(6)]],
                          uint2 gid [[thread_position_in_grid]]) {
 
     if (gid.x >= params.imageWidth || gid.y >= params.imageHeight) {
@@ -262,6 +267,7 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
 
     float3 pixelLab = labBuffer[pixelIndex];
     float2 pixelPos = float2(gid.x, gid.y);
+    float pixelDepth = depthBuffer[pixelIndex];
 
     float minDistance = INFINITY;
     uint bestLabel = 0;
@@ -293,13 +299,18 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
                     float spatialDist = distance(pixelPos, centerPos);
 
                     if (spatialDist < float(params.searchRegion)) {
-                        // Calculate color distance in LAB space
+                        // Calculate color distance in OKLAB space
                         float3 colorDiff = float3(center.L, center.a, center.b) - pixelLab;
                         float colorDist = length(colorDiff);
 
-                        // Combined distance with compactness weighting
+                        // Calculate depth distance (already 0-1 like OKLAB L channel)
+                        float depthDiff = center.depth - pixelDepth;
+                        float depthDist = abs(depthDiff) * params.depthWeight;
+
+                        // Combined distance with compactness weighting and depth
                         float dist = sqrt(
                             (colorDist * colorDist) +
+                            (depthDist * depthDist) +
                             (spatialDist * spatialDist * params.spatialWeight * params.spatialWeight)
                         );
 
@@ -329,6 +340,7 @@ struct CenterAccumulator {
     atomic_float sumL;
     atomic_float sumA;
     atomic_float sumB;
+    atomic_float sumDepth;
     atomic_uint count;
 };
 
@@ -338,6 +350,7 @@ kernel void updateCenters(device const float3* labBuffer [[buffer(0)]],
                           device ClusterCenter* centers [[buffer(2)]],
                           device CenterAccumulator* accumulators [[buffer(3)]],
                           constant SLICParams& params [[buffer(4)]],
+                          device const float* depthBuffer [[buffer(5)]],
                           uint2 gid [[thread_position_in_grid]]) {
 
     if (gid.x >= params.imageWidth || gid.y >= params.imageHeight) {
@@ -349,6 +362,7 @@ kernel void updateCenters(device const float3* labBuffer [[buffer(0)]],
 
     if (label < params.numCenters) {
         float3 lab = labBuffer[pixelIndex];
+        float depth = depthBuffer[pixelIndex];
 
         // Accumulate values for this center
         atomic_fetch_add_explicit(&accumulators[label].sumX, float(gid.x), memory_order_relaxed);
@@ -356,6 +370,7 @@ kernel void updateCenters(device const float3* labBuffer [[buffer(0)]],
         atomic_fetch_add_explicit(&accumulators[label].sumL, lab.x, memory_order_relaxed);
         atomic_fetch_add_explicit(&accumulators[label].sumA, lab.y, memory_order_relaxed);
         atomic_fetch_add_explicit(&accumulators[label].sumB, lab.z, memory_order_relaxed);
+        atomic_fetch_add_explicit(&accumulators[label].sumDepth, depth, memory_order_relaxed);
         atomic_fetch_add_explicit(&accumulators[label].count, 1u, memory_order_relaxed);
     }
 }
@@ -379,6 +394,7 @@ kernel void finalizeCenters(device const CenterAccumulator* accumulators [[buffe
         centers[gid].L = atomic_load_explicit(&accumulators[gid].sumL, memory_order_relaxed) / fcount;
         centers[gid].a = atomic_load_explicit(&accumulators[gid].sumA, memory_order_relaxed) / fcount;
         centers[gid].b = atomic_load_explicit(&accumulators[gid].sumB, memory_order_relaxed) / fcount;
+        centers[gid].depth = atomic_load_explicit(&accumulators[gid].sumDepth, memory_order_relaxed) / fcount;
     }
 }
 
@@ -396,6 +412,7 @@ kernel void clearAccumulators(device CenterAccumulator* accumulators [[buffer(0)
     atomic_store_explicit(&accumulators[gid].sumL, 0.0f, memory_order_relaxed);
     atomic_store_explicit(&accumulators[gid].sumA, 0.0f, memory_order_relaxed);
     atomic_store_explicit(&accumulators[gid].sumB, 0.0f, memory_order_relaxed);
+    atomic_store_explicit(&accumulators[gid].sumDepth, 0.0f, memory_order_relaxed);
     atomic_store_explicit(&accumulators[gid].count, 0u, memory_order_relaxed);
 }
 
@@ -529,12 +546,14 @@ kernel void findMaxLabel(
 /// Accumulate superpixel features in parallel
 /// Each pixel thread contributes to its superpixel's accumulators using atomics
 kernel void accumulateSuperpixelFeatures(
-    device const float3* labColors [[buffer(0)]],        // LAB color for each pixel
+    device const float3* labColors [[buffer(0)]],        // OKLAB color for each pixel
     device const uint* labels [[buffer(1)]],             // Superpixel label for each pixel
     device atomic_float* colorAccumulators [[buffer(2)]], // Flat array: [L0,a0,b0, L1,a1,b1, ...]
     device atomic_float* positionAccumulators [[buffer(3)]], // Flat array: [x0,y0, x1,y1, ...]
     device atomic_int* pixelCounts [[buffer(4)]],        // Count of pixels per superpixel
     constant SuperpixelExtractionParams& params [[buffer(5)]],
+    device const float* depthBuffer [[buffer(6)]],       // Depth value for each pixel (0-1)
+    device atomic_float* depthAccumulators [[buffer(7)]], // Depth accumulator: 1 float per superpixel
     uint gid [[thread_position_in_grid]])
 {
     uint totalPixels = params.imageWidth * params.imageHeight;
@@ -543,6 +562,7 @@ kernel void accumulateSuperpixelFeatures(
     // Get this pixel's data
     uint label = labels[gid];
     float3 labColor = labColors[gid];
+    float depth = depthBuffer[gid];
 
     // Calculate pixel position
     uint x = gid % params.imageWidth;
@@ -560,6 +580,9 @@ kernel void accumulateSuperpixelFeatures(
     uint positionBaseIndex = label * 2;
     atomic_fetch_add_explicit(&positionAccumulators[positionBaseIndex + 0], position.x, memory_order_relaxed);
     atomic_fetch_add_explicit(&positionAccumulators[positionBaseIndex + 1], position.y, memory_order_relaxed);
+
+    // Depth accumulator: 1 float per superpixel
+    atomic_fetch_add_explicit(&depthAccumulators[label], depth, memory_order_relaxed);
 
     // Pixel count: 1 int per superpixel
     atomic_fetch_add_explicit(&pixelCounts[label], 1, memory_order_relaxed);

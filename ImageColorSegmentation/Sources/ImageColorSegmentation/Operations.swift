@@ -17,7 +17,7 @@ class ColorConversionOperation: PipelineOperation {
     }
 
     func execute(context: inout ExecutionContext) async throws {
-        // NOTE: RGB→LAB conversion is handled by SLIC processor
+        // NOTE: RGB→OKLAB conversion is handled by SLIC processor
         // This operation just passes the metadata for later use
         context.metadata["colorSpace"] = colorSpace
         context.metadata["labColorAdjustments"] = adjustments
@@ -32,10 +32,12 @@ class SegmentationOperation: PipelineOperation {
 
     private let superpixelCount: Int
     private let compactness: Float
+    private let depthWeight: Float
 
-    init(superpixelCount: Int, compactness: Float) {
+    init(superpixelCount: Int, compactness: Float, depthWeight: Float = 0.0) {
         self.superpixelCount = superpixelCount
         self.compactness = compactness
+        self.depthWeight = depthWeight
     }
 
     func execute(context: inout ExecutionContext) async throws {
@@ -83,6 +85,9 @@ class SegmentationOperation: PipelineOperation {
         // Create SLIC processor
         let slicProcessor = try SLICProcessor(device: context.device, library: library)
 
+        // Get depth buffer from context if available
+        let depthBuffer = context.buffers["depthBuffer"]
+
         // Process SLIC segmentation (creates its own command buffer internally)
         let slicResult = try slicProcessor.processSLIC(
             inputTexture: inputTexture,
@@ -91,6 +96,8 @@ class SegmentationOperation: PipelineOperation {
             compactness: compactness,
             greenAxisScale: greenAxisScale,
             lightnessWeight: lightnessWeight,
+            depthWeight: depthWeight,
+            depthBuffer: depthBuffer,
             iterations: 10,
             enforceConnectivity: true
         )
@@ -102,6 +109,7 @@ class SegmentationOperation: PipelineOperation {
         context.metadata["numSLICCenters"] = slicResult.numCenters
         context.metadata["superpixelCount"] = superpixelCount
         context.metadata["compactness"] = compactness
+        context.metadata["depthWeight"] = depthWeight
     }
 }
 
@@ -127,6 +135,10 @@ class ClusteringOperation: PipelineOperation {
             throw PipelineError.executionFailed("Missing buffers for clustering")
         }
 
+        // Get depth buffer (optional) and depth weight
+        let depthBuffer = context.buffers["depthBuffer"]
+        let depthWeight = context.metadata["depthWeight"] as? Float ?? 0.0
+
         // Get Metal library from context (compiled once at initialization)
         let library = context.library
 
@@ -146,16 +158,20 @@ class ClusteringOperation: PipelineOperation {
             from: labBuffer,
             labelsBuffer: labelsBuffer,
             width: width,
-            height: height
+            height: height,
+            depthBuffer: depthBuffer
         )
 
         // Extract color features for clustering
         let superpixelColors = SuperpixelProcessor.extractColorFeatures(from: superpixelData)
 
+        // Extract depth features (already 0-1 to match OKLAB L channel range)
+        let superpixelDepths = SuperpixelProcessor.extractDepthFeatures(from: superpixelData, scale: 1.0)
+
         // Get color adjustments from metadata
         let adjustments = context.metadata["labColorAdjustments"] as? LABColorAdjustments ?? .default
 
-        // Perform K-means++ clustering
+        // Perform K-means++ clustering with depth features
         let kmeansProcessor = try KMeansProcessor(
             device: context.device,
             library: library,
@@ -164,9 +180,11 @@ class ClusteringOperation: PipelineOperation {
 
         let clusteringResult = try kmeansProcessor.cluster(
             superpixelColors: superpixelColors,
+            superpixelDepths: superpixelDepths,
             numberOfClusters: clusterCount,
             lightnessWeight: adjustments.lightnessScale,
             greenAxisScale: adjustments.greenAxisScale,
+            depthWeight: depthWeight,
             maxIterations: 300,
             convergenceDistance: 0.01,
             seed: seed
@@ -208,6 +226,112 @@ class ClusteringOperation: PipelineOperation {
         context.metadata["clusterSeed"] = seed
         context.metadata["clusteringIterations"] = clusteringResult.iterations
         context.metadata["clusteringConverged"] = clusteringResult.converged
+    }
+}
+
+// MARK: - Graph-Based Clustering Operation
+
+/// Graph-based clustering using Region Adjacency Graph (RAG)
+/// Superior to K-means because it respects spatial adjacency relationships
+class GraphClusteringOperation: PipelineOperation {
+    let inputType: DataType = .superpixelFeatures
+    let outputType: DataType = .clusterAssignments
+
+    private let clusterCount: Int
+
+    init(clusterCount: Int) {
+        self.clusterCount = clusterCount
+    }
+
+    func execute(context: inout ExecutionContext) async throws {
+        guard let labBuffer = context.buffers["labImage"],
+              let labelsBuffer = context.buffers["labelsBuffer"],
+              let width = context.metadata["width"] as? Int,
+              let height = context.metadata["height"] as? Int else {
+            throw PipelineError.executionFailed("Missing buffers for graph clustering")
+        }
+
+        // Get depth buffer (optional) and depth weight
+        let depthBuffer = context.buffers["depthBuffer"]
+        let depthWeight = context.metadata["depthWeight"] as? Float ?? 0.0
+
+        // Get Metal library from context
+        let library = context.library
+
+        // Create command queue
+        guard let commandQueue = context.device.makeCommandQueue() else {
+            throw PipelineError.executionFailed("Failed to create command queue")
+        }
+
+        // Extract superpixel features using GPU
+        let superpixelProcessor = try SuperpixelProcessor(
+            device: context.device,
+            library: library,
+            commandQueue: commandQueue
+        )
+
+        let superpixelData = try superpixelProcessor.extractSuperpixelsMetal(
+            from: labBuffer,
+            labelsBuffer: labelsBuffer,
+            width: width,
+            height: height,
+            depthBuffer: depthBuffer
+        )
+
+        // Get superpixel labels for adjacency detection
+        let labelsPointer = labelsBuffer.contents().bindMemory(to: UInt32.self, capacity: width * height)
+        let labelMap = Array(UnsafeBufferPointer(start: labelsPointer, count: width * height))
+
+        // Build Region Adjacency Graph
+        let rag = RegionAdjacencyGraph(
+            superpixels: superpixelData.superpixels,
+            labels: labelMap,
+            width: width,
+            height: height,
+            depthWeight: depthWeight
+        )
+
+        // Perform hierarchical clustering
+        let clusterMapping = rag.cluster(into: clusterCount)
+
+        // Get cluster centers
+        let clusterCenters = rag.getClusterCenters(mapping: clusterMapping)
+
+        // Convert superpixel→cluster mapping to pixel→cluster mapping
+        var pixelClusters = [UInt32](repeating: 0, count: width * height)
+        for (superpixelId, clusterId) in clusterMapping {
+            // Find all pixels with this superpixel label
+            for i in 0..<labelMap.count {
+                if Int(labelMap[i]) == superpixelId {
+                    pixelClusters[i] = UInt32(clusterId)
+                }
+            }
+        }
+
+        // Create cluster assignments buffer
+        guard let assignmentsBuffer = context.device.makeBuffer(
+            bytes: pixelClusters,
+            length: pixelClusters.count * MemoryLayout<UInt32>.size,
+            options: .storageModeShared
+        ) else {
+            throw PipelineError.executionFailed("Failed to create assignments buffer")
+        }
+
+        // Create cluster centers buffer
+        guard let centersBuffer = context.device.makeBuffer(
+            bytes: clusterCenters,
+            length: clusterCenters.count * MemoryLayout<SIMD3<Float>>.size,
+            options: .storageModeShared
+        ) else {
+            throw PipelineError.executionFailed("Failed to create centers buffer")
+        }
+
+        // Store results
+        context.buffers["clusterAssignments"] = assignmentsBuffer
+        context.buffers["clusterCenters"] = centersBuffer
+        context.buffers["pixelClusters"] = assignmentsBuffer
+        context.metadata["clusterCount"] = clusterCenters.count
+        context.metadata["clusteringMethod"] = "graph-rag"
     }
 }
 
@@ -303,7 +427,7 @@ class MergeOperation: PipelineOperation {
         let centersPointer = centersBuffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: clusterCount)
         let centers = Array(UnsafeBufferPointer(start: centersPointer, count: clusterCount))
 
-        // Find clusters to merge based on LAB distance threshold
+        // Find clusters to merge based on OKLAB distance threshold
         var mergeMap = Array(0..<clusterCount)  // mergeMap[i] = target cluster for cluster i
 
         for i in 0..<clusterCount {
@@ -495,7 +619,7 @@ class MergeOperation: PipelineOperation {
                 if i == j {
                     distances[i][j] = 0
                 } else {
-                    // Euclidean distance in LAB space
+                    // Euclidean distance in OKLAB space
                     let diff = centers[i] - centers[j]
                     let distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z
                     distances[i][j] = sqrt(distSq)

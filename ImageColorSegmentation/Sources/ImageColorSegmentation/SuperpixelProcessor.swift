@@ -8,6 +8,7 @@
 import Foundation
 import Metal
 import simd
+import Accelerate
 
 /// Parameters for superpixel extraction (matches Metal struct)
 struct SuperpixelExtractionParams {
@@ -43,6 +44,7 @@ public class SuperpixelProcessor {
         public let labColor: SIMD3<Float>
         public let pixelCount: Int
         public let centerPosition: SIMD2<Float>
+        public let averageDepth: Float
     }
 
     /// Result containing processed superpixel data
@@ -56,7 +58,8 @@ public class SuperpixelProcessor {
         from labBuffer: MTLBuffer,
         labelsBuffer: MTLBuffer,
         width: Int,
-        height: Int
+        height: Int,
+        depthBuffer: MTLBuffer? = nil
     ) throws -> SuperpixelData {
 
         let pixelCount = width * height
@@ -95,10 +98,40 @@ public class SuperpixelProcessor {
             throw PipelineError.executionFailed("Failed to create pixel counts buffer")
         }
 
-        // Zero out buffers
-        memset(colorAccumulatorsBuffer.contents(), 0, colorAccumulatorsBuffer.length)
-        memset(positionAccumulatorsBuffer.contents(), 0, positionAccumulatorsBuffer.length)
+        guard let depthAccumulatorsBuffer = device.makeBuffer(
+            length: MemoryLayout<Float>.size * numSuperpixels,
+            options: .storageModeShared
+        ) else {
+            throw PipelineError.executionFailed("Failed to create depth accumulators buffer")
+        }
+
+        // Zero out buffers using vDSP for Float buffers
+        let colorAccumPtr = colorAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 3)
+        vDSP_vclr(colorAccumPtr, vDSP_Stride(1), vDSP_Length(numSuperpixels * 3))
+
+        let positionAccumPtr = positionAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 2)
+        vDSP_vclr(positionAccumPtr, vDSP_Stride(1), vDSP_Length(numSuperpixels * 2))
+
+        let depthAccumPtr = depthAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels)
+        vDSP_vclr(depthAccumPtr, vDSP_Stride(1), vDSP_Length(numSuperpixels))
+
+        // memset for Int32 buffer (vDSP doesn't have integer clear)
         memset(pixelCountsBuffer.contents(), 0, pixelCountsBuffer.length)
+
+        // Create or use dummy depth buffer if not provided
+        let actualDepthBuffer: MTLBuffer
+        if let provided = depthBuffer {
+            actualDepthBuffer = provided
+        } else {
+            // Create dummy depth buffer (all 0.5)
+            guard let dummy = device.makeBuffer(length: MemoryLayout<Float>.size * pixelCount, options: .storageModeShared) else {
+                throw PipelineError.executionFailed("Failed to create dummy depth buffer")
+            }
+            let ptr = dummy.contents().bindMemory(to: Float.self, capacity: pixelCount)
+            var fillValue: Float = 0.5
+            vDSP_vfill(&fillValue, ptr, vDSP_Stride(1), vDSP_Length(pixelCount))
+            actualDepthBuffer = dummy
+        }
 
         // Create parameter struct
         var params = SuperpixelExtractionParams(
@@ -120,6 +153,8 @@ public class SuperpixelProcessor {
         encoder.setBuffer(positionAccumulatorsBuffer, offset: 0, index: 3)
         encoder.setBuffer(pixelCountsBuffer, offset: 0, index: 4)
         encoder.setBytes(&params, length: MemoryLayout<SuperpixelExtractionParams>.size, index: 5)
+        encoder.setBuffer(actualDepthBuffer, offset: 0, index: 6)
+        encoder.setBuffer(depthAccumulatorsBuffer, offset: 0, index: 7)
 
         let threadsPerGroup = MTLSize(width: 256, height: 1, depth: 1)
         let groupsPerGrid = MTLSize(
@@ -136,6 +171,7 @@ public class SuperpixelProcessor {
         // Read back results and create Superpixel objects
         let colorAccumulators = colorAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 3)
         let positionAccumulators = positionAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels * 2)
+        let depthAccumulators = depthAccumulatorsBuffer.contents().bindMemory(to: Float.self, capacity: numSuperpixels)
         let pixelCounts = pixelCountsBuffer.contents().bindMemory(to: Int32.self, capacity: numSuperpixels)
 
         var superpixels: [Superpixel] = []
@@ -163,11 +199,14 @@ public class SuperpixelProcessor {
                 positionAccumulators[positionBaseIndex + 1] / Float(count)
             )
 
+            let avgDepth = depthAccumulators[labelInt] / Float(count)
+
             let superpixel = Superpixel(
                 id: labelInt,
                 labColor: avgColor,
                 pixelCount: count,
-                centerPosition: avgPosition
+                centerPosition: avgPosition,
+                averageDepth: avgDepth
             )
             superpixels.append(superpixel)
         }
@@ -199,6 +238,21 @@ public class SuperpixelProcessor {
             let normalizedX = (superpixel.centerPosition.x / Float(imageWidth)) * 100.0
             let normalizedY = (superpixel.centerPosition.y / Float(imageHeight)) * 100.0
             return SIMD2<Float>(normalizedX, normalizedY)
+        }
+    }
+
+    /// Extract depth features from superpixel data
+    /// - Parameters:
+    ///   - superpixelData: Superpixel data with average depth values
+    ///   - scale: Scale factor for depth (default: 100.0 to match LAB L channel range)
+    /// - Returns: Array of scaled depth values
+    public static func extractDepthFeatures(
+        from superpixelData: SuperpixelData,
+        scale: Float = 100.0
+    ) -> [Float] {
+        return superpixelData.superpixels.map { superpixel in
+            // Scale depth (0-1) to match LAB scale (default: 0-100)
+            superpixel.averageDepth * scale
         }
     }
 }

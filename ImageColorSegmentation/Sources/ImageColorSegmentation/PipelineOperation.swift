@@ -4,7 +4,6 @@ import Metal
 /// Execution context passed through the pipeline
 public struct ExecutionContext {
     public let resources: MetalResources
-    public let commandBuffer: MTLCommandBuffer
     public var buffers: [String: MTLBuffer]
     public var metadata: [String: Any]
 
@@ -14,12 +13,10 @@ public struct ExecutionContext {
 
     public init(
         resources: MetalResources,
-        commandBuffer: MTLCommandBuffer,
         buffers: [String: MTLBuffer] = [:],
         metadata: [String: Any] = [:]
     ) {
         self.resources = resources
-        self.commandBuffer = commandBuffer
         self.buffers = buffers
         self.metadata = metadata
     }

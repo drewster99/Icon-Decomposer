@@ -60,15 +60,9 @@ public class ImagePipeline {
 
     /// Execute the pipeline with an input image
     public func execute(input: PlatformImage) async throws -> PipelineExecution {
-        guard let commandQueue = resources.device.makeCommandQueue(),
-              let commandBuffer = commandQueue.makeCommandBuffer() else {
-            throw PipelineError.executionFailed("Failed to create command buffer")
-        }
-
         // Create initial context with input image buffer
         var context = ExecutionContext(
             resources: resources,
-            commandBuffer: commandBuffer,
             buffers: [:],
             metadata: [
                 "width": Int(input.size.width),
@@ -81,13 +75,43 @@ public class ImagePipeline {
         context.buffers["input"] = inputBuffer
         context.buffers["rgbaImage"] = inputBuffer
 
-        // Execute all operations
+        // Execute all operations (each creates its own command buffer)
         for operation in operations {
             try await operation.execute(context: &context)
         }
 
-        commandBuffer.commit()
-        commandBuffer.waitUntilCompleted()
+        return PipelineExecution(
+            pipeline: self,
+            context: context,
+            finalType: currentOutputType
+        )
+    }
+
+    /// Execute the pipeline with an input image and optional depth map
+    public func execute(input: PlatformImage, depthMap: PlatformImage) async throws -> PipelineExecution {
+        // Create initial context with input image buffer
+        var context = ExecutionContext(
+            resources: resources,
+            buffers: [:],
+            metadata: [
+                "width": Int(input.size.width),
+                "height": Int(input.size.height)
+            ]
+        )
+
+        // Convert input image to Metal buffer
+        let inputBuffer = try createMetalBuffer(from: input)
+        context.buffers["input"] = inputBuffer
+        context.buffers["rgbaImage"] = inputBuffer
+
+        // Convert depth map to Metal buffer (grayscale float buffer)
+        let depthBuffer = try createDepthBuffer(from: depthMap)
+        context.buffers["depthBuffer"] = depthBuffer
+
+        // Execute all operations (each creates its own command buffer)
+        for operation in operations {
+            try await operation.execute(context: &context)
+        }
 
         return PipelineExecution(
             pipeline: self,
@@ -114,15 +138,9 @@ public class ImagePipeline {
         // Wait for parent to complete (or at least the steps we need)
         await parent.waitForStep(currentOutputType)
 
-        guard let commandQueue = resources.device.makeCommandQueue(),
-              let commandBuffer = commandQueue.makeCommandBuffer() else {
-            throw PipelineError.executionFailed("Failed to create command buffer")
-        }
-
         // Start with parent's context (buffers and metadata)
         var context = ExecutionContext(
             resources: resources,
-            commandBuffer: commandBuffer,
             buffers: parent.context.buffers,
             metadata: parent.context.metadata
         )
@@ -131,19 +149,15 @@ public class ImagePipeline {
         let parentOpCount = parent.pipeline.operations.count
         let newOperations = operations.dropFirst(parentOpCount)
 
-        // Execute only NEW operations
+        // Execute only NEW operations (each creates its own command buffer)
         for operation in newOperations {
             try await operation.execute(context: &context)
         }
 
-        commandBuffer.commit()
-        commandBuffer.waitUntilCompleted()
-
         return PipelineExecution(
             pipeline: self,
             context: context,
-            finalType: currentOutputType,
-            commandBuffer: commandBuffer
+            finalType: currentOutputType
         )
     }
 
@@ -197,6 +211,68 @@ public class ImagePipeline {
         context.draw(cgImage, in: fullRect)
 
         return buffer
+    }
+
+    /// Convert depth map image to Metal float buffer
+    private func createDepthBuffer(from depthMap: PlatformImage) throws -> MTLBuffer {
+        #if os(macOS)
+        guard let cgImage = depthMap.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            throw PipelineError.executionFailed("Failed to get CGImage from depth map")
+        }
+        #else
+        guard let cgImage = depthMap.cgImage else {
+            throw PipelineError.executionFailed("Failed to get CGImage from depth map")
+        }
+        #endif
+
+        let width = cgImage.width
+        let height = cgImage.height
+        let floatBufferSize = width * height * MemoryLayout<Float>.size
+
+        guard let floatBuffer = resources.device.makeBuffer(length: floatBufferSize, options: .storageModeShared) else {
+            throw PipelineError.executionFailed("Failed to create depth Metal buffer")
+        }
+
+        // Create temporary CPU buffer for RGBA data (will be deallocated when out of scope)
+        let bytesPerPixel = 4
+        let bytesPerRow = width * bytesPerPixel
+        let rgbaBufferSize = height * bytesPerRow
+        var tempData = Data(count: rgbaBufferSize)
+
+        // Draw depth map into temporary CPU buffer
+        let bitmapInfo = CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+        let context = tempData.withUnsafeMutableBytes { (bytes: UnsafeMutableRawBufferPointer) -> CGContext? in
+            return CGContext(
+                data: bytes.baseAddress,
+                width: width,
+                height: height,
+                bitsPerComponent: 8,
+                bytesPerRow: bytesPerRow,
+                space: CGColorSpaceCreateDeviceRGB(),
+                bitmapInfo: bitmapInfo
+            )
+        }
+
+        guard let context = context else {
+            throw PipelineError.executionFailed("Failed to create CGContext for depth extraction")
+        }
+
+        let fullRect = CGRect(x: 0, y: 0, width: width, height: height)
+        context.draw(cgImage, in: fullRect)
+
+        // Extract grayscale values and convert to floats (0-1 range)
+        let floatPointer = floatBuffer.contents().bindMemory(to: Float.self, capacity: width * height)
+        tempData.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+            let rgbaPointer = bytes.bindMemory(to: UInt8.self)
+            for i in 0..<(width * height) {
+                // BGRA format: extract R channel (all channels should be the same for grayscale)
+                let pixelOffset = i * 4
+                let grayValue = rgbaPointer[pixelOffset + 2]  // R channel in BGRA
+                floatPointer[i] = Float(grayValue) / 255.0
+            }
+        }
+
+        return floatBuffer
     }
 }
 
@@ -270,8 +346,8 @@ extension ImagePipeline {
     }
 
     /// Segment image into superpixels
-    public func segment(superpixels: Int, compactness: Float = 25.0) throws -> Self {
-        let operation = SegmentationOperation(superpixelCount: superpixels, compactness: compactness)
+    public func segment(superpixels: Int, compactness: Float = 25.0, depthWeight: Float = 0.0) throws -> Self {
+        let operation = SegmentationOperation(superpixelCount: superpixels, compactness: compactness, depthWeight: depthWeight)
         return try addOperation(operation)
     }
 

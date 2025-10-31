@@ -23,6 +23,7 @@ struct SLICParams {
     float spatialWeight;
     uint numCenters;
     uint iteration;
+    float depthWeight;      // Weight for depth in distance calculation (0 = ignore depth)
 };
 
 // Structure for cluster centers
@@ -32,6 +33,7 @@ struct ClusterCenter {
     float L;
     float a;
     float b;
+    float depth;            // Average depth value for this cluster
 };
 
 // Clear distances buffer to infinity
@@ -179,6 +181,7 @@ kernel void rgbToLab(texture2d<float, access::read> rgbTexture [[texture(0)]],
 kernel void initializeCenters(device const float3* labBuffer [[buffer(0)]],
                               device ClusterCenter* centers [[buffer(1)]],
                               constant SLICParams& params [[buffer(2)]],
+                              device const float* depthBuffer [[buffer(3)]],
                               uint gid [[thread_position_in_grid]]) {
 
     if (gid >= params.numCenters) {
@@ -233,6 +236,9 @@ kernel void initializeCenters(device const float3* labBuffer [[buffer(0)]],
     centers[gid].L = lab.x;
     centers[gid].a = lab.y;
     centers[gid].b = lab.z;
+
+    // Initialize depth from buffer (always valid - dummy buffer used when depth not needed)
+    centers[gid].depth = depthBuffer[index];
 }
 
 // Assign pixels to nearest cluster center
@@ -242,6 +248,7 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
                          device atomic_float* distances [[buffer(3)]],
                          constant SLICParams& params [[buffer(4)]],
                          device const float* alphaBuffer [[buffer(5)]],
+                         device const float* depthBuffer [[buffer(6)]],
                          uint2 gid [[thread_position_in_grid]]) {
 
     if (gid.x >= params.imageWidth || gid.y >= params.imageHeight) {
@@ -262,6 +269,7 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
 
     float3 pixelLab = labBuffer[pixelIndex];
     float2 pixelPos = float2(gid.x, gid.y);
+    float pixelDepth = depthBuffer[pixelIndex];
 
     float minDistance = INFINITY;
     uint bestLabel = 0;
@@ -297,9 +305,15 @@ kernel void assignPixels(device const float3* labBuffer [[buffer(0)]],
                         float3 colorDiff = float3(center.L, center.a, center.b) - pixelLab;
                         float colorDist = length(colorDiff);
 
-                        // Combined distance with compactness weighting
+                        // Calculate depth distance (scaled to similar range as color)
+                        // Depth is 0-1, so multiply by 100 to match LAB L channel range
+                        float depthDiff = (center.depth - pixelDepth) * 100.0;
+                        float depthDist = abs(depthDiff) * params.depthWeight;
+
+                        // Combined distance with compactness weighting and depth
                         float dist = sqrt(
                             (colorDist * colorDist) +
+                            (depthDist * depthDist) +
                             (spatialDist * spatialDist * params.spatialWeight * params.spatialWeight)
                         );
 
@@ -329,6 +343,7 @@ struct CenterAccumulator {
     atomic_float sumL;
     atomic_float sumA;
     atomic_float sumB;
+    atomic_float sumDepth;
     atomic_uint count;
 };
 
@@ -338,6 +353,7 @@ kernel void updateCenters(device const float3* labBuffer [[buffer(0)]],
                           device ClusterCenter* centers [[buffer(2)]],
                           device CenterAccumulator* accumulators [[buffer(3)]],
                           constant SLICParams& params [[buffer(4)]],
+                          device const float* depthBuffer [[buffer(5)]],
                           uint2 gid [[thread_position_in_grid]]) {
 
     if (gid.x >= params.imageWidth || gid.y >= params.imageHeight) {
@@ -349,6 +365,7 @@ kernel void updateCenters(device const float3* labBuffer [[buffer(0)]],
 
     if (label < params.numCenters) {
         float3 lab = labBuffer[pixelIndex];
+        float depth = depthBuffer[pixelIndex];
 
         // Accumulate values for this center
         atomic_fetch_add_explicit(&accumulators[label].sumX, float(gid.x), memory_order_relaxed);
@@ -356,6 +373,7 @@ kernel void updateCenters(device const float3* labBuffer [[buffer(0)]],
         atomic_fetch_add_explicit(&accumulators[label].sumL, lab.x, memory_order_relaxed);
         atomic_fetch_add_explicit(&accumulators[label].sumA, lab.y, memory_order_relaxed);
         atomic_fetch_add_explicit(&accumulators[label].sumB, lab.z, memory_order_relaxed);
+        atomic_fetch_add_explicit(&accumulators[label].sumDepth, depth, memory_order_relaxed);
         atomic_fetch_add_explicit(&accumulators[label].count, 1u, memory_order_relaxed);
     }
 }
@@ -379,6 +397,7 @@ kernel void finalizeCenters(device const CenterAccumulator* accumulators [[buffe
         centers[gid].L = atomic_load_explicit(&accumulators[gid].sumL, memory_order_relaxed) / fcount;
         centers[gid].a = atomic_load_explicit(&accumulators[gid].sumA, memory_order_relaxed) / fcount;
         centers[gid].b = atomic_load_explicit(&accumulators[gid].sumB, memory_order_relaxed) / fcount;
+        centers[gid].depth = atomic_load_explicit(&accumulators[gid].sumDepth, memory_order_relaxed) / fcount;
     }
 }
 
@@ -396,6 +415,7 @@ kernel void clearAccumulators(device CenterAccumulator* accumulators [[buffer(0)
     atomic_store_explicit(&accumulators[gid].sumL, 0.0f, memory_order_relaxed);
     atomic_store_explicit(&accumulators[gid].sumA, 0.0f, memory_order_relaxed);
     atomic_store_explicit(&accumulators[gid].sumB, 0.0f, memory_order_relaxed);
+    atomic_store_explicit(&accumulators[gid].sumDepth, 0.0f, memory_order_relaxed);
     atomic_store_explicit(&accumulators[gid].count, 0u, memory_order_relaxed);
 }
 
@@ -535,6 +555,8 @@ kernel void accumulateSuperpixelFeatures(
     device atomic_float* positionAccumulators [[buffer(3)]], // Flat array: [x0,y0, x1,y1, ...]
     device atomic_int* pixelCounts [[buffer(4)]],        // Count of pixels per superpixel
     constant SuperpixelExtractionParams& params [[buffer(5)]],
+    device const float* depthBuffer [[buffer(6)]],       // Depth value for each pixel (0-1)
+    device atomic_float* depthAccumulators [[buffer(7)]], // Depth accumulator: 1 float per superpixel
     uint gid [[thread_position_in_grid]])
 {
     uint totalPixels = params.imageWidth * params.imageHeight;
@@ -543,6 +565,7 @@ kernel void accumulateSuperpixelFeatures(
     // Get this pixel's data
     uint label = labels[gid];
     float3 labColor = labColors[gid];
+    float depth = depthBuffer[gid];
 
     // Calculate pixel position
     uint x = gid % params.imageWidth;
@@ -560,6 +583,9 @@ kernel void accumulateSuperpixelFeatures(
     uint positionBaseIndex = label * 2;
     atomic_fetch_add_explicit(&positionAccumulators[positionBaseIndex + 0], position.x, memory_order_relaxed);
     atomic_fetch_add_explicit(&positionAccumulators[positionBaseIndex + 1], position.y, memory_order_relaxed);
+
+    // Depth accumulator: 1 float per superpixel
+    atomic_fetch_add_explicit(&depthAccumulators[label], depth, memory_order_relaxed);
 
     // Pixel count: 1 int per superpixel
     atomic_fetch_add_explicit(&pixelCounts[label], 1, memory_order_relaxed);

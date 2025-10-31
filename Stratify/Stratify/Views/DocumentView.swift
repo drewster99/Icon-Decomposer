@@ -27,116 +27,112 @@ struct DocumentView: View {
     var body: some View {
         HSplitView {
             // Left: Original image preview
-            VStack {
-                Spacer()
-                    .frame(height: document.sourceImage == nil ? 16 : 0)
+            VStack(spacing: 0) {
+                // Header - always visible
                 Text(document.sourceImage == nil ? "Import your PNG or JPG icon file to get started" : "Original Icon")
                     .font(.headline)
                     .padding(.top)
+                    .padding(.bottom, 8)
 
                 if let sourceImage = document.sourceImage {
-                    #if DEBUG
-                    // Show both original and depth map vertically
-                    VStack(spacing: 16) {
-                        // Original image
-                        VStack(spacing: 8) {
-                            Text("Original")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
+                    // Scrollable content area
+                    ScrollView {
+                        VStack(spacing: 16) {
+                            #if DEBUG
+                            // Show both original and depth map vertically
+                            // Original image
+                            VStack(spacing: 8) {
+                                Text("Original")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
 
-                            Image(nsImage: sourceImage)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(maxWidth: 480, maxHeight: 480)
-                                .background(CheckerboardBackground())
-                                .border(Color.secondary.opacity(0.3))
-                                .onTapGesture(count: 2) {
-                                    openIconInWindow(sourceImage)
-                                }
-                                .help("Double-click to view at full size")
-
-                            Text("Double-click to enlarge")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-
-                        // Depth map
-                        VStack(spacing: 8) {
-                            Text("Depth Map")
-                                .font(.subheadline)
-                                .fontWeight(.semibold)
-
-                            if let depthMap = document.depthMap {
-                                Image(nsImage: depthMap)
-                                    .resizable()
-                                    .aspectRatio(contentMode: .fit)
-                                    .frame(maxWidth: 480, maxHeight: 480)
-                                    .border(Color.secondary.opacity(0.3))
-                                    .onTapGesture(count: 2) {
-                                        openIconInWindow(depthMap)
-                                    }
-                                    .help("Double-click to view at full size")
-                            } else {
-                                Rectangle()
-                                    .fill(Color.gray.opacity(0.1))
-                                    .frame(maxWidth: 480, maxHeight: 480)
-                                    .overlay(
-                                        Text("Computing...")
-                                            .foregroundColor(.secondary)
-                                    )
-                            }
-
-                            Text("Closer = Brighter")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                    .padding()
-
-                    // Toggle for using depth map
-                    Toggle("Use Depth Map for Processing", isOn: $useDepthForProcessing)
-                        .padding(.horizontal)
-                        .help("When enabled, uses depth map instead of original image for layer extraction")
-                        .onChange(of: useDepthForProcessing) { _, _ in
-                            // Clear layers when toggling to force reprocessing
-                            if !document.layers.isEmpty {
-                                document.updateLayers([], actionName: "Clear Layers")
-                            }
-                        }
-                    #else
-                    // Release mode: just show original
-                    GeometryReader { geometry in
-                        let size = min(min(geometry.size.width, geometry.size.height), 512)
-
-                        VStack {
-                            Spacer()
-                            HStack {
-                                Spacer()
-                                VStack(spacing: 8) {
+                                // Square container for image
+                                ZStack {
                                     Image(nsImage: sourceImage)
                                         .resizable()
                                         .aspectRatio(contentMode: .fit)
-                                        .frame(width: size, height: size)
                                         .background(CheckerboardBackground())
                                         .border(Color.secondary.opacity(0.3))
                                         .onTapGesture(count: 2) {
                                             openIconInWindow(sourceImage)
                                         }
                                         .help("Double-click to view at full size")
-
-                                    Text("Double-click to enlarge")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
                                 }
-                                Spacer()
-                            }
-                            Spacer()
-                        }
-                    }
-                    .frame(minWidth: 256, maxWidth: 512)
-                    #endif
+                                .frame(width: 259, height: 259)
+                                .clipped()
 
-                    // Parameters section
+                                Text("Double-click to enlarge")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            // Depth map
+                            VStack(spacing: 8) {
+                                Text("Depth Map")
+                                    .font(.subheadline)
+                                    .fontWeight(.semibold)
+
+                                // Square container for depth map
+                                ZStack {
+                                    if let depthMap = document.depthMap {
+                                        Image(nsImage: depthMap)
+                                            .resizable()
+                                            .aspectRatio(contentMode: .fit)
+                                            .border(Color.secondary.opacity(0.3))
+                                            .onTapGesture(count: 2) {
+                                                openIconInWindow(depthMap)
+                                            }
+                                            .help("Double-click to view at full size")
+                                    } else {
+                                        Rectangle()
+                                            .fill(Color.gray.opacity(0.1))
+                                            .overlay(
+                                                Text("Computing...")
+                                                    .foregroundColor(.secondary)
+                                            )
+                                    }
+                                }
+                                .frame(width: 259, height: 259)
+                                .clipped()
+
+                                Text("Closer = Brighter")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            // Toggle for using depth map
+                            Toggle("Use Depth Map for Processing", isOn: $useDepthForProcessing)
+                                .help("When enabled, uses depth map instead of original image for layer extraction")
+                                .onChange(of: useDepthForProcessing) { _, _ in
+                                    // Clear layers when toggling to force reprocessing
+                                    if !document.layers.isEmpty {
+                                        document.updateLayers([], actionName: "Clear Layers")
+                                    }
+                                }
+                            #else
+                            // Release mode: just show original
+                            VStack(spacing: 8) {
+                                Image(nsImage: sourceImage)
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .frame(maxWidth: 512, maxHeight: 512)
+                                    .background(CheckerboardBackground())
+                                    .border(Color.secondary.opacity(0.3))
+                                    .onTapGesture(count: 2) {
+                                        openIconInWindow(sourceImage)
+                                    }
+                                    .help("Double-click to view at full size")
+
+                                Text("Double-click to enlarge")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            #endif
+                        }
+                        .padding()
+                    }
+
+                    // Parameters section - always visible at bottom
                     VStack(alignment: .leading, spacing: 12) {
                         Text("Processing parameters")
                             .font(.subheadline)
@@ -168,6 +164,12 @@ struct DocumentView: View {
                                 Slider(value: $document.parameters.depthWeightSLIC, in: 0...1, step: 0.05)
                                 .frame(maxWidth: 150)
                                 .disabled(document.depthMap == nil)
+                                .onChange(of: document.parameters.depthWeightSLIC) { _, _ in
+                                    // Recalculate as user drags slider
+                                    if !document.layers.isEmpty {
+                                        analyzeIcon()
+                                    }
+                                }
 
                                 Text(String(format: "%.2f", document.parameters.depthWeightSLIC))
                                     .font(.caption)
@@ -188,6 +190,7 @@ struct DocumentView: View {
                     .background(Color(nsColor: .controlBackgroundColor))
                     .cornerRadius(8)
                     .padding(.horizontal)
+                    .padding(.bottom)
                 } else {
                     // Import screen
                     ImportIconView { selectedImage in
@@ -195,18 +198,20 @@ struct DocumentView: View {
                         // Automatically analyze after import
                         analyzeIcon()
                     }
+                    .frame(maxHeight: .infinity)
                 }
-
-                Spacer()
             }
-            .frame(minWidth: 256, maxWidth: document.sourceImage == nil ? 512 : 256)
+            .frame(minWidth: 276, maxWidth: document.sourceImage == nil ? 512 : 276)
             .animation(.easeInOut(duration: 0.3), value: document.sourceImage != nil)
 
             // Right: Layers
             VStack(alignment: .leading, spacing: 0) {
+                // Header - always visible
                 Text("Layers")
                     .font(.headline)
-                    .padding()
+                    .padding(.top)
+                    .padding(.bottom, 8)
+                    .padding(.horizontal)
 
                 ZStack {
                     if document.layers.isEmpty {
@@ -218,8 +223,7 @@ struct DocumentView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         VStack(alignment: .leading, spacing: 0) {
-
-                            // Layer grid takes all available space above the toolbar
+                            // Layer grid (has its own internal ScrollView)
                             LayerFlowGrid(
                                 layers: document.layers,
                                 selectedLayerIDs: selectedLayerIDs,
@@ -241,6 +245,8 @@ struct DocumentView: View {
                                 .padding(.horizontal)
                                 .padding(.bottom, 8)
                                 .padding(.top, 8)
+
+                            // Bottom buttons section - always visible
                             Divider()
 
                             // Layer management buttons
@@ -281,7 +287,7 @@ struct DocumentView: View {
                                 #endif
 
                                 Spacer()
-                                
+
                                 // Undo/Redo buttons
                                 Button(action: { undoManager?.undo() },
                                        label: {
@@ -289,13 +295,13 @@ struct DocumentView: View {
                                 })
                                 .disabled(!(undoManager?.canUndo ?? false))
                                 .help("Undo")
-                                
+
                                 Button(action: { undoManager?.redo() }, label: {
                                     Image(systemName: "arrow.uturn.forward")
                                 })
                                 .disabled(!(undoManager?.canRedo ?? false))
                                 .help("Redo")
-                                
+
                                 Button("Export...") {
                                     exportIconBundle()
                                 }
@@ -407,7 +413,8 @@ struct DocumentView: View {
             do {
                 let layers = try await ProcessingCoordinator.processIcon(
                     imageToProcess,
-                    parameters: document.parameters
+                    parameters: document.parameters,
+                    depthMap: document.depthMap
                 )
 
                 await MainActor.run {

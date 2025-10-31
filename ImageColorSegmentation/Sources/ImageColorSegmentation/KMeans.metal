@@ -18,22 +18,22 @@ struct KMeansParams {
 
 // Calculate minimum distance from each point to any existing center
 kernel void calculateMinDistances(
-    device const float3* points [[buffer(0)]],           // Superpixel LAB colors
-    device const float3* centers [[buffer(1)]],          // Current cluster centers
+    device const float4* points [[buffer(0)]],           // Superpixel features (LAB + depth)
+    device const float4* centers [[buffer(1)]],          // Current cluster centers
     device float* minDistances [[buffer(2)]],            // Output: min distance to any center
     constant KMeansParams& params [[buffer(3)]],
     uint gid [[thread_position_in_grid]])
 {
     if (gid >= params.numPoints) return;
 
-    float3 point = points[gid];
+    float4 point = points[gid];
     float minDist = INFINITY;
 
     // Find distance to nearest center - numClusters, in this case, is really the number
     // of centers we have so far
     for (uint i = 0; i < params.numClusters; i++) {
-        float3 center = centers[i];
-        float3 diff = point - center;
+        float4 center = centers[i];
+        float4 diff = point - center;
         float dist = length(diff);
         minDist = min(minDist, dist);
     }
@@ -62,8 +62,8 @@ kernel void calculateDistanceSquaredProbabilities(
 
 // Assign each point to its nearest cluster center
 kernel void assignPointsToClusters(
-    device const float3* points [[buffer(0)]],           // Superpixel LAB colors
-    device const float3* centers [[buffer(1)]],          // Current cluster centers
+    device const float4* points [[buffer(0)]],           // Superpixel features (LAB + depth)
+    device const float4* centers [[buffer(1)]],          // Current cluster centers
     device int* assignments [[buffer(2)]],               // Output: cluster assignment for each point
     device float* distances [[buffer(3)]],               // Output: distance to assigned cluster
     constant KMeansParams& params [[buffer(4)]],
@@ -71,14 +71,14 @@ kernel void assignPointsToClusters(
 {
     if (gid >= params.numPoints) return;
 
-    float3 point = points[gid];
+    float4 point = points[gid];
     float minDist = INFINITY;
     int nearestCluster = 0;
 
     // Find nearest cluster center
     for (uint i = 0; i < params.numClusters; i++) {
-        float3 center = centers[i];
-        float3 diff = point - center;
+        float4 center = centers[i];
+        float4 diff = point - center;
         float dist = length(diff);
 
         if (dist < minDist) {
@@ -100,16 +100,17 @@ kernel void clearClusterAccumulators(
 {
     if (gid >= params.numClusters) return;
 
-    uint baseOffset = gid * 3;
+    uint baseOffset = gid * 4;  // 4D features now (L, a, b, depth)
     clusterSums[baseOffset + 0] = 0.0;
     clusterSums[baseOffset + 1] = 0.0;
     clusterSums[baseOffset + 2] = 0.0;
+    clusterSums[baseOffset + 3] = 0.0;
     clusterCounts[gid] = 0;
 }
 
 // Simple direct atomic accumulation (basic approach)
 kernel void accumulateClusterData(
-    device const float3* points [[buffer(0)]],           // Superpixel LAB colors
+    device const float4* points [[buffer(0)]],           // Superpixel features (LAB + depth)
     device const int* assignments [[buffer(1)]],         // Cluster assignments
     device atomic_float* clusterSums [[buffer(2)]],      // Output: sum of points per cluster (as flat array)
     device atomic_int* clusterCounts [[buffer(3)]],      // Output: count of points per cluster
@@ -119,14 +120,15 @@ kernel void accumulateClusterData(
     if (gid >= params.numPoints) return;
 
     int clusterId = assignments[gid];
-    float3 point = points[gid];
+    float4 point = points[gid];
 
     // Direct atomic operations - simple but potentially slower
-    // Each float3 is stored as 3 consecutive floats
-    uint baseOffset = clusterId * 3;
+    // Each float4 is stored as 4 consecutive floats
+    uint baseOffset = clusterId * 4;
     atomic_fetch_add_explicit(&clusterSums[baseOffset + 0], point.x, memory_order_relaxed);
     atomic_fetch_add_explicit(&clusterSums[baseOffset + 1], point.y, memory_order_relaxed);
     atomic_fetch_add_explicit(&clusterSums[baseOffset + 2], point.z, memory_order_relaxed);
+    atomic_fetch_add_explicit(&clusterSums[baseOffset + 3], point.w, memory_order_relaxed);
 
     atomic_fetch_add_explicit(&clusterCounts[clusterId], 1, memory_order_relaxed);
 }
@@ -135,8 +137,8 @@ kernel void accumulateClusterData(
 kernel void updateClusterCenters(
     device const float* clusterSums [[buffer(0)]],       // Sum of points per cluster (flat array)
     device const int* clusterCounts [[buffer(1)]],       // Count of points per cluster
-    device float3* newCenters [[buffer(2)]],             // Output: new cluster centers
-    device const float3* oldCenters [[buffer(3)]],       // Previous centers (for convergence check)
+    device float4* newCenters [[buffer(2)]],             // Output: new cluster centers (4D)
+    device const float4* oldCenters [[buffer(3)]],       // Previous centers (for convergence check)
     device float* centerDeltas [[buffer(4)]],            // Output: movement of each center
     constant KMeansParams& params [[buffer(5)]],
     uint gid [[thread_position_in_grid]])
@@ -144,17 +146,18 @@ kernel void updateClusterCenters(
     if (gid >= params.numClusters) return;
 
     int count = clusterCounts[gid];
-    uint baseOffset = gid * 3;
+    uint baseOffset = gid * 4;  // 4D features now
 
     if (count > 0) {
         // Calculate new center as mean of assigned points
-        float3 sum = float3(clusterSums[baseOffset + 0],
+        float4 sum = float4(clusterSums[baseOffset + 0],
                            clusterSums[baseOffset + 1],
-                           clusterSums[baseOffset + 2]);
+                           clusterSums[baseOffset + 2],
+                           clusterSums[baseOffset + 3]);
         newCenters[gid] = sum / float(count);
 
         // Calculate movement from old center
-        float3 delta = newCenters[gid] - oldCenters[gid];
+        float4 delta = newCenters[gid] - oldCenters[gid];
         centerDeltas[gid] = length(delta);
     } else {
         // Empty cluster - keep old center

@@ -32,10 +32,12 @@ class SegmentationOperation: PipelineOperation {
 
     private let superpixelCount: Int
     private let compactness: Float
+    private let depthWeight: Float
 
-    init(superpixelCount: Int, compactness: Float) {
+    init(superpixelCount: Int, compactness: Float, depthWeight: Float = 0.0) {
         self.superpixelCount = superpixelCount
         self.compactness = compactness
+        self.depthWeight = depthWeight
     }
 
     func execute(context: inout ExecutionContext) async throws {
@@ -83,6 +85,9 @@ class SegmentationOperation: PipelineOperation {
         // Create SLIC processor
         let slicProcessor = try SLICProcessor(device: context.device, library: library)
 
+        // Get depth buffer from context if available
+        let depthBuffer = context.buffers["depthBuffer"]
+
         // Process SLIC segmentation (creates its own command buffer internally)
         let slicResult = try slicProcessor.processSLIC(
             inputTexture: inputTexture,
@@ -91,6 +96,8 @@ class SegmentationOperation: PipelineOperation {
             compactness: compactness,
             greenAxisScale: greenAxisScale,
             lightnessWeight: lightnessWeight,
+            depthWeight: depthWeight,
+            depthBuffer: depthBuffer,
             iterations: 10,
             enforceConnectivity: true
         )
@@ -102,6 +109,7 @@ class SegmentationOperation: PipelineOperation {
         context.metadata["numSLICCenters"] = slicResult.numCenters
         context.metadata["superpixelCount"] = superpixelCount
         context.metadata["compactness"] = compactness
+        context.metadata["depthWeight"] = depthWeight
     }
 }
 
@@ -127,6 +135,10 @@ class ClusteringOperation: PipelineOperation {
             throw PipelineError.executionFailed("Missing buffers for clustering")
         }
 
+        // Get depth buffer (optional) and depth weight
+        let depthBuffer = context.buffers["depthBuffer"]
+        let depthWeight = context.metadata["depthWeight"] as? Float ?? 0.0
+
         // Get Metal library from context (compiled once at initialization)
         let library = context.library
 
@@ -146,16 +158,20 @@ class ClusteringOperation: PipelineOperation {
             from: labBuffer,
             labelsBuffer: labelsBuffer,
             width: width,
-            height: height
+            height: height,
+            depthBuffer: depthBuffer
         )
 
         // Extract color features for clustering
         let superpixelColors = SuperpixelProcessor.extractColorFeatures(from: superpixelData)
 
+        // Extract depth features (scaled to 0-100 range to match LAB L channel)
+        let superpixelDepths = SuperpixelProcessor.extractDepthFeatures(from: superpixelData, scale: 100.0)
+
         // Get color adjustments from metadata
         let adjustments = context.metadata["labColorAdjustments"] as? LABColorAdjustments ?? .default
 
-        // Perform K-means++ clustering
+        // Perform K-means++ clustering with depth features
         let kmeansProcessor = try KMeansProcessor(
             device: context.device,
             library: library,
@@ -164,9 +180,11 @@ class ClusteringOperation: PipelineOperation {
 
         let clusteringResult = try kmeansProcessor.cluster(
             superpixelColors: superpixelColors,
+            superpixelDepths: superpixelDepths,
             numberOfClusters: clusterCount,
             lightnessWeight: adjustments.lightnessScale,
             greenAxisScale: adjustments.greenAxisScale,
+            depthWeight: depthWeight,
             maxIterations: 300,
             convergenceDistance: 0.01,
             seed: seed

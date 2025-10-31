@@ -8,6 +8,7 @@
 import Foundation
 import Metal
 import simd
+import Accelerate
 
 /// Parameters for K-means (matches Metal struct)
 struct KMeansParams {
@@ -66,12 +67,14 @@ public class KMeansProcessor {
         public let converged: Bool
     }
 
-    /// Perform K-means++ clustering on superpixel colors
+    /// Perform K-means++ clustering on superpixel colors with optional depth
     public func cluster(
         superpixelColors: [SIMD3<Float>],
+        superpixelDepths: [Float] = [],
         numberOfClusters: Int,
         lightnessWeight: Float,
         greenAxisScale: Float,
+        depthWeight: Float = 0.0,
         maxIterations: Int = 300,
         convergenceDistance: Float = 0.01,
         seed: Int? = nil
@@ -85,18 +88,25 @@ public class KMeansProcessor {
             srand48(seed)
         }
 
-        // Create Metal buffers
-        guard let originalColorsBuffer = device.makeBuffer(
-            bytes: superpixelColors,
-            length: MemoryLayout<SIMD3<Float>>.size * numPoints,
+        // Combine LAB colors with depth into 4D features
+        // Format: [L, a, b, depth * depthWeight]
+        let features: [SIMD4<Float>] = superpixelColors.enumerated().map { index, color in
+            let depth = index < superpixelDepths.count ? superpixelDepths[index] * depthWeight : 0.0
+            return SIMD4<Float>(color.x, color.y, color.z, depth)
+        }
+
+        // Create Metal buffers for 4D features
+        guard let featuresBuffer = device.makeBuffer(
+            bytes: features,
+            length: MemoryLayout<SIMD4<Float>>.size * numPoints,
             options: .storageModeShared
         ) else {
-            throw PipelineError.executionFailed("Failed to create colors buffer")
+            throw PipelineError.executionFailed("Failed to create features buffer")
         }
 
         // SKIP color weighting here - it's already applied in SLIC's rgbToLab kernel
         // This prevents double-application of lightnessWeight and greenAxisScale
-        let colorsBuffer = originalColorsBuffer
+        let colorsBuffer = featuresBuffer
 
         // Initialize centers using K-means++
         let initialCenters = try initializeKMeansPlusPlus(
@@ -105,15 +115,15 @@ public class KMeansProcessor {
             numClusters: numClusters
         )
 
-        // Create buffers for main iteration
+        // Create buffers for main iteration (4D features now)
         var centersBuffer = device.makeBuffer(
             bytes: initialCenters,
-            length: MemoryLayout<SIMD3<Float>>.size * numClusters,
+            length: MemoryLayout<SIMD4<Float>>.size * numClusters,
             options: .storageModeShared
         )!
 
         var newCentersBuffer = device.makeBuffer(
-            length: MemoryLayout<SIMD3<Float>>.size * numClusters,
+            length: MemoryLayout<SIMD4<Float>>.size * numClusters,
             options: .storageModeShared
         )!
 
@@ -128,7 +138,7 @@ public class KMeansProcessor {
         )!
 
         let clusterSumsBuffer = device.makeBuffer(
-            length: MemoryLayout<Float>.size * numClusters * 3,
+            length: MemoryLayout<Float>.size * numClusters * 4,  // 4D now (L, a, b, depth)
             options: .storageModeShared
         )!
 
@@ -231,10 +241,10 @@ public class KMeansProcessor {
         colors: MTLBuffer,
         numPoints: Int,
         numClusters: Int
-    ) throws -> [SIMD3<Float>] {
+    ) throws -> [SIMD4<Float>] {
 
-        var centers: [SIMD3<Float>] = []
-        let colorsPointer = colors.contents().bindMemory(to: SIMD3<Float>.self, capacity: numPoints)
+        var centers: [SIMD4<Float>] = []
+        let colorsPointer = colors.contents().bindMemory(to: SIMD4<Float>.self, capacity: numPoints)
 
         // Choose first center randomly
         let firstIndex = Int(drand48() * Double(numPoints))
@@ -245,7 +255,7 @@ public class KMeansProcessor {
             // Create buffer for current centers
             guard let currentCentersBuffer = device.makeBuffer(
                 bytes: centers,
-                length: MemoryLayout<SIMD3<Float>>.size * centers.count,
+                length: MemoryLayout<SIMD4<Float>>.size * centers.count,
                 options: .storageModeShared
             ) else {
                 throw PipelineError.executionFailed("Failed to create current centers buffer")
@@ -720,11 +730,13 @@ public class KMeansProcessor {
         // Initialize spatial centers by finding superpixels closest to color centers
         var initialSpatialCenters: [SIMD2<Float>] = []
         for colorCenter in initialColorCenters {
-            // Find superpixel with closest color
+            // Find superpixel with closest color (only compare LAB, ignore depth component)
+            let centerLAB = SIMD3<Float>(colorCenter.x, colorCenter.y, colorCenter.z)
             var minDist: Float = .infinity
             var closestIdx = 0
             for (idx, color) in superpixelColors.enumerated() {
-                let dist = simd_distance(color, colorCenter)
+                let diff = color - centerLAB
+                let dist = sqrt(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z)
                 if dist < minDist {
                     minDist = dist
                     closestIdx = idx
@@ -733,10 +745,10 @@ public class KMeansProcessor {
             initialSpatialCenters.append(superpixelPositions[closestIdx])
         }
 
-        // Create buffers for centers
+        // Create buffers for centers (4D features now)
         var colorCentersBuffer = device.makeBuffer(
             bytes: initialColorCenters,
-            length: MemoryLayout<SIMD3<Float>>.size * numClusters,
+            length: MemoryLayout<SIMD4<Float>>.size * numClusters,
             options: .storageModeShared
         )!
 
@@ -747,7 +759,7 @@ public class KMeansProcessor {
         )!
 
         var newColorCentersBuffer = device.makeBuffer(
-            length: MemoryLayout<SIMD3<Float>>.size * numClusters,
+            length: MemoryLayout<SIMD4<Float>>.size * numClusters,
             options: .storageModeShared
         )!
 
@@ -818,9 +830,14 @@ public class KMeansProcessor {
                 spatialWeight: spatialWeight
             )
 
-            // Clear accumulators
-            memset(colorSumsBuffer.contents(), 0, colorSumsBuffer.length)
-            memset(spatialSumsBuffer.contents(), 0, spatialSumsBuffer.length)
+            // Clear accumulators using vDSP for Float buffers
+            let colorSumsPtr = colorSumsBuffer.contents().bindMemory(to: Float.self, capacity: numClusters * 3)
+            vDSP_vclr(colorSumsPtr, vDSP_Stride(1), vDSP_Length(numClusters * 3))
+
+            let spatialSumsPtr = spatialSumsBuffer.contents().bindMemory(to: Float.self, capacity: numClusters * 2)
+            vDSP_vclr(spatialSumsPtr, vDSP_Stride(1), vDSP_Length(numClusters * 2))
+
+            // memset for Int32 buffer (vDSP doesn't have integer clear)
             memset(clusterCountsBuffer.contents(), 0, clusterCountsBuffer.length)
 
             // Accumulate cluster data
@@ -854,8 +871,8 @@ public class KMeansProcessor {
                 spatialWeight: spatialWeight
             )
 
-            // Check convergence
-            memset(totalDeltaBuffer.contents(), 0, totalDeltaBuffer.length)
+            // Check convergence - clear single Float value
+            totalDeltaBuffer.contents().bindMemory(to: Float.self, capacity: 1).pointee = 0.0
             try checkConvergence(
                 centerDeltas: centerDeltasBuffer,
                 totalDelta: totalDeltaBuffer,

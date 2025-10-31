@@ -17,11 +17,15 @@ class ProcessingCoordinator {
     /// - Parameters:
     ///   - image: Source icon image
     ///   - parameters: Processing parameters
+    ///   - depthMap: Optional depth map for depth-aware segmentation
     /// - Returns: Array of extracted layers
-    static func processIcon(_ image: NSImage, parameters: ProcessingParameters) async throws -> [Layer] {
+    static func processIcon(_ image: NSImage, parameters: ProcessingParameters, depthMap: NSImage? = nil) async throws -> [Layer] {
         print("Starting icon processing...")
         print("  Parameters: \(parameters.numberOfClusters) clusters, compactness: \(parameters.compactness)")
         print("  Auto-merge threshold: \(parameters.autoMergeThreshold)")
+        if parameters.depthWeightSLIC > 0 {
+            print("  Depth weight: \(parameters.depthWeightSLIC) (depth map: \(depthMap != nil ? "provided" : "not provided"))")
+        }
 
         // Create processing pipeline
         let adjustments = LABColorAdjustments(
@@ -33,15 +37,22 @@ class ProcessingCoordinator {
             .convertColorSpace(to: .lab, adjustments: adjustments)
             .segment(
                 superpixels: parameters.numberOfSegments,
-                compactness: parameters.compactness
+                compactness: parameters.compactness,
+                depthWeight: parameters.depthWeightSLIC
             )
             .cluster(into: parameters.numberOfClusters, seed: parameters.clusteringSeed)
             // Don't auto-merge - let user manually combine layers via "Auto-Merge Layers" button
             // .autoMerge(threshold: parameters.autoMergeThreshold, strategy: .iterativeWeighted())
             .extractLayers()
 
-        // Execute pipeline
-        let result = try await pipeline.execute(input: image)
+        // Execute pipeline with depth map if provided (regardless of weight)
+        // When depthWeight == 0, depth values are read but have no effect (multiplied by zero)
+        let result: PipelineExecution
+        if let depthMap = depthMap {
+            result = try await pipeline.execute(input: image, depthMap: depthMap)
+        } else {
+            result = try await pipeline.execute(input: image)
+        }
 
         // Extract layers from result
         guard let clusterCount: Int = result.metadata(for: "clusterCount") else {

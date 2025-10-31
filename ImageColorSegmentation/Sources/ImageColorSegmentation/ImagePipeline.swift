@@ -358,6 +358,13 @@ extension ImagePipeline {
         return try addOperation(operation)
     }
 
+    /// Cluster features using graph-based Region Adjacency Graph (RAG) hierarchical merging
+    /// Superior to K-means because it respects spatial adjacency relationships
+    public func graphCluster(into k: Int) throws -> Self {
+        let operation = GraphClusteringOperation(clusterCount: k)
+        return try addOperation(operation)
+    }
+
     /// Extract layers from clusters
     public func extractLayers() throws -> Self {
         let operation = LayerExtractionOperation()

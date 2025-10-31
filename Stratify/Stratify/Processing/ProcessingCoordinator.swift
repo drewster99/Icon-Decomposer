@@ -40,7 +40,7 @@ class ProcessingCoordinator {
                 compactness: parameters.compactness,
                 depthWeight: parameters.depthWeightSLIC
             )
-            .cluster(into: parameters.numberOfClusters, seed: parameters.clusteringSeed)
+            .graphCluster(into: parameters.numberOfClusters)  // Use graph-based RAG clustering instead of K-means
             // Don't auto-merge - let user manually combine layers via "Auto-Merge Layers" button
             // .autoMerge(threshold: parameters.autoMergeThreshold, strategy: .iterativeWeighted())
             .extractLayers()

@@ -1,0 +1,10 @@
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/DataType.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/ImagePipeline.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/KMeansProcessor.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/LayerExtractor.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/MetalResources.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/Operations.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/PipelineOperation.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/SLICProcessor.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/Sources/ImageColorSegmentation/SuperpixelProcessor.swift
+/Users/andrew/cursor/icon-decomposer/ImageColorSegmentation/.build/arm64-apple-macosx/debug/ImageColorSegmentation.build/DerivedSources/resource_bundle_accessor.swift

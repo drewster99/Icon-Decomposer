@@ -449,3 +449,4 @@
 /another-way/sam_env/lib/python3.11/site-packages/wheel-0.45.1.dist-info/WHEEL filter=lfs diff=lfs merge=lfs -text
 /another-way/sam_env/lib/python3.11/site-packages/wheel/vendored/packaging/LICENSE filter=lfs diff=lfs merge=lfs -text
 *.1 filter=lfs diff=lfs merge=lfs -text
+ImageColorSegmentation/output_layers filter=lfs diff=lfs merge=lfs -text

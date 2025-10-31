@@ -17,7 +17,7 @@ class ColorConversionOperation: PipelineOperation {
     }
 
     func execute(context: inout ExecutionContext) async throws {
-        // NOTE: RGB→LAB conversion is handled by SLIC processor
+        // NOTE: RGB→OKLAB conversion is handled by SLIC processor
         // This operation just passes the metadata for later use
         context.metadata["colorSpace"] = colorSpace
         context.metadata["labColorAdjustments"] = adjustments
@@ -165,8 +165,8 @@ class ClusteringOperation: PipelineOperation {
         // Extract color features for clustering
         let superpixelColors = SuperpixelProcessor.extractColorFeatures(from: superpixelData)
 
-        // Extract depth features (scaled to 0-100 range to match LAB L channel)
-        let superpixelDepths = SuperpixelProcessor.extractDepthFeatures(from: superpixelData, scale: 100.0)
+        // Extract depth features (already 0-1 to match OKLAB L channel range)
+        let superpixelDepths = SuperpixelProcessor.extractDepthFeatures(from: superpixelData, scale: 1.0)
 
         // Get color adjustments from metadata
         let adjustments = context.metadata["labColorAdjustments"] as? LABColorAdjustments ?? .default
@@ -321,7 +321,7 @@ class MergeOperation: PipelineOperation {
         let centersPointer = centersBuffer.contents().bindMemory(to: SIMD3<Float>.self, capacity: clusterCount)
         let centers = Array(UnsafeBufferPointer(start: centersPointer, count: clusterCount))
 
-        // Find clusters to merge based on LAB distance threshold
+        // Find clusters to merge based on OKLAB distance threshold
         var mergeMap = Array(0..<clusterCount)  // mergeMap[i] = target cluster for cluster i
 
         for i in 0..<clusterCount {
@@ -513,7 +513,7 @@ class MergeOperation: PipelineOperation {
                 if i == j {
                     distances[i][j] = 0
                 } else {
-                    // Euclidean distance in LAB space
+                    // Euclidean distance in OKLAB space
                     let diff = centers[i] - centers[j]
                     let distSq = diff.x * diff.x + diff.y * diff.y + diff.z * diff.z
                     distances[i][j] = sqrt(distSq)

@@ -88,7 +88,7 @@ public class KMeansProcessor {
             srand48(seed)
         }
 
-        // Combine LAB colors with depth into 4D features
+        // Combine OKLAB colors with depth into 4D features
         // Format: [L, a, b, depth * depthWeight]
         let features: [SIMD4<Float>] = superpixelColors.enumerated().map { index, color in
             let depth = index < superpixelDepths.count ? superpixelDepths[index] * depthWeight : 0.0

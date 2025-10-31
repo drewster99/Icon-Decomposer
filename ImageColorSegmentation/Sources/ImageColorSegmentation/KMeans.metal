@@ -18,7 +18,7 @@ struct KMeansParams {
 
 // Calculate minimum distance from each point to any existing center
 kernel void calculateMinDistances(
-    device const float4* points [[buffer(0)]],           // Superpixel features (LAB + depth)
+    device const float4* points [[buffer(0)]],           // Superpixel features (OKLAB + depth)
     device const float4* centers [[buffer(1)]],          // Current cluster centers
     device float* minDistances [[buffer(2)]],            // Output: min distance to any center
     constant KMeansParams& params [[buffer(3)]],
@@ -62,7 +62,7 @@ kernel void calculateDistanceSquaredProbabilities(
 
 // Assign each point to its nearest cluster center
 kernel void assignPointsToClusters(
-    device const float4* points [[buffer(0)]],           // Superpixel features (LAB + depth)
+    device const float4* points [[buffer(0)]],           // Superpixel features (OKLAB + depth)
     device const float4* centers [[buffer(1)]],          // Current cluster centers
     device int* assignments [[buffer(2)]],               // Output: cluster assignment for each point
     device float* distances [[buffer(3)]],               // Output: distance to assigned cluster
@@ -110,7 +110,7 @@ kernel void clearClusterAccumulators(
 
 // Simple direct atomic accumulation (basic approach)
 kernel void accumulateClusterData(
-    device const float4* points [[buffer(0)]],           // Superpixel features (LAB + depth)
+    device const float4* points [[buffer(0)]],           // Superpixel features (OKLAB + depth)
     device const int* assignments [[buffer(1)]],         // Cluster assignments
     device atomic_float* clusterSums [[buffer(2)]],      // Output: sum of points per cluster (as flat array)
     device atomic_int* clusterCounts [[buffer(3)]],      // Output: count of points per cluster

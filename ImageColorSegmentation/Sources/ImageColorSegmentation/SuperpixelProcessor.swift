@@ -217,7 +217,7 @@ public class SuperpixelProcessor {
         )
     }
 
-    /// Extract LAB color features from superpixel data
+    /// Extract OKLAB color features from superpixel data
     public static func extractColorFeatures(from superpixelData: SuperpixelData) -> [SIMD3<Float>] {
         return superpixelData.superpixels.map { $0.labColor }
     }
@@ -244,14 +244,14 @@ public class SuperpixelProcessor {
     /// Extract depth features from superpixel data
     /// - Parameters:
     ///   - superpixelData: Superpixel data with average depth values
-    ///   - scale: Scale factor for depth (default: 100.0 to match LAB L channel range)
+    ///   - scale: Scale factor for depth (default: 1.0 to match OKLAB L channel range of 0-1)
     /// - Returns: Array of scaled depth values
     public static func extractDepthFeatures(
         from superpixelData: SuperpixelData,
-        scale: Float = 100.0
+        scale: Float = 1.0
     ) -> [Float] {
         return superpixelData.superpixels.map { superpixel in
-            // Scale depth (0-1) to match LAB scale (default: 0-100)
+            // Depth is already 0-1, matching OKLAB L channel range
             superpixel.averageDepth * scale
         }
     }

@@ -99,7 +99,7 @@ public class SLICProcessor {
         // Create buffers
         let labBufferSize = width * height * MemoryLayout<SIMD3<Float>>.size
         guard let labBuffer = device.makeBuffer(length: labBufferSize, options: .storageModeShared) else {
-            throw PipelineError.executionFailed("Failed to create LAB buffer")
+            throw PipelineError.executionFailed("Failed to create OKLAB buffer")
         }
 
         let alphaBufferSize = width * height * MemoryLayout<Float>.size
@@ -176,7 +176,7 @@ public class SLICProcessor {
             encoder.endEncoding()
         }
 
-        // Step 2: RGB to LAB conversion
+        // Step 2: RGB to OKLAB conversion
         if let encoder = commandBuffer.makeComputeCommandEncoder() {
             encoder.setComputePipelineState(rgbToLabPipeline)
             encoder.setTexture(blurredTexture, index: 0)

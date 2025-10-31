@@ -18,6 +18,7 @@ public enum PipelineError: Error {
 }
 
 /// Main pipeline class for image processing
+/// Uses OKLAB color space for perceptually uniform color operations
 public class ImagePipeline {
     internal var operations: [PipelineOperation] = []
     private var currentOutputType: DataType = .none
@@ -379,12 +380,14 @@ public enum ColorSpace {
 
 public struct LABColorAdjustments {
     public let lightnessScale: Float
-    public let greenAxisScale: Float
+    public let greenAxisScale: Float  // Not used with OKLAB, kept for compatibility
 
-    /// Default adjustments optimized for icon decomposition
+    /// Default adjustments optimized for OKLAB color space
+    /// - lightnessScale: 1.0 (OKLAB is more uniform, start without scaling)
+    /// - greenAxisScale: 1.0 (OKLAB doesn't need axis-specific scaling)
     public static let `default` = LABColorAdjustments(
-        lightnessScale: 0.35,
-        greenAxisScale: 2.0
+        lightnessScale: 1.0,
+        greenAxisScale: 1.0
     )
 
     public init(lightnessScale: Float, greenAxisScale: Float) {
